@@ -20,6 +20,7 @@ BuildRequires: sqlite-devel
 BuildRequires: gpgme-devel
 BuildRequires: systemd
 BuildRequires: libsoup-devel
+BuildRequires: libarchive-devel
 BuildRequires: gobject-introspection-devel
 BuildRequires: libappstream-glib-devel >= 0.3.6
 

@@ -14,6 +14,7 @@ AM_CPPFLAGS =						\
 	$(UEFI_CFLAGS)					\
 	$(GPGME_CFLAGS)					\
 	$(SOUP_CFLAGS)					\
+	$(ARCHIVE_CFLAGS)				\
 	-I$(top_srcdir)					\
 	-I$(top_builddir)				\
 	-I$(top_srcdir)/libfwupd			\
@@ -98,6 +99,8 @@ fwupd_SOURCES =						\
 	fu-pending.h					\
 	fu-provider.c					\
 	fu-provider.h					\
+	fu-provider-rpi.c				\
+	fu-provider-rpi.h				\
 	fu-provider-udev.c				\
 	fu-provider-udev.h				\
 	fu-provider-usb.c				\
@@ -131,6 +134,7 @@ fwupd_LDADD =						\
 	$(POLKIT_LIBS)					\
 	$(SQLITE_LIBS)					\
 	$(GPGME_LIBS)					\
+	$(ARCHIVE_LIBS)					\
 	$(UEFI_LIBS)
 
 fwupd_LDFLAGS =						\
