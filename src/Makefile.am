@@ -197,6 +197,8 @@ fu_self_test_SOURCES =					\
 	fu-provider.h					\
 	fu-provider-fake.c				\
 	fu-provider-fake.h				\
+	fu-provider-rpi.c				\
+	fu-provider-rpi.h				\
 	fu-rom.c					\
 	fu-rom.h					\
 	fu-self-test.c
@@ -207,6 +209,7 @@ fu_self_test_LDADD =					\
 	$(SQLITE_LIBS)					\
 	$(GCAB_LIBS)					\
 	$(GPGME_LIBS)					\
+	$(ARCHIVE_LIBS)					\
 	$(GLIB_LIBS)
 
 fu_self_test_CFLAGS =					\

@@ -50,6 +50,8 @@ struct _FuProviderRpiClass
 
 GType		 fu_provider_rpi_get_type	(void);
 FuProvider	*fu_provider_rpi_new		(void);
+void		 fu_provider_rpi_set_fw_dir	(FuProviderRpi	*provider_rpi,
+						 const gchar	*fw_dir);
 
 G_END_DECLS
 

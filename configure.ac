@@ -126,6 +126,11 @@ PKG_CHECK_MODULES(ARCHIVE, libarchive)
 PKG_CHECK_MODULES(SOUP, libsoup-2.4 >= 2.42)
 AC_PATH_PROG(DOCBOOK2MAN, docbook2man)
 
+AC_PATH_PROG(GCAB, [gcab], [no])
+if test x$GCAB = "xno" ; then
+	AC_MSG_ERROR([gcab program not found])
+fi
+
 # ColorHug support
 AC_ARG_ENABLE(colorhug, AS_HELP_STRING([--enable-colorhug],[Enable ColorHug support]),
 	      enable_colorhug=$enableval, enable_colorhug=yes)
@@ -188,6 +193,7 @@ libfwupd/Makefile
 data/Makefile
 data/pki/Makefile
 data/tests/Makefile
+data/tests/rpiupdate/Makefile
 docs/Makefile
 docs/man/Makefile
 policy/Makefile
