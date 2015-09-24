@@ -62,6 +62,7 @@ typedef struct {
 	PolkitAuthority		*authority;
 	FwupdStatus		 status;
 	FuPending		*pending;
+	AsProfile		*profile;
 	AsStore			*store;
 	guint			 store_changed_id;
 } FuMainPrivate;
@@ -1289,10 +1290,16 @@ fu_main_providers_coldplug (FuMainPrivate *priv)
 {
 	FuProvider *provider;
 	guint i;
+	g_autoptr(AsProfileTask) ptask = NULL;
 
+	ptask = as_profile_start_literal (priv->profile, "FuMain:coldplug");
 	for (i = 0; i < priv->providers->len; i++) {
 		g_autoptr(GError) error = NULL;
+		g_autoptr(AsProfileTask) ptask2 = NULL;
 		provider = g_ptr_array_index (priv->providers, i);
+		ptask2 = as_profile_start (priv->profile,
+					   "FuMain:coldplug{%s}",
+					   fu_provider_get_name (provider));
 		if (!fu_provider_coldplug (FU_PROVIDER (provider), &error))
 			g_warning ("Failed to coldplug: %s", error->message);
 	}
@@ -1343,6 +1350,9 @@ fu_main_on_bus_acquired_cb (GDBusConnection *connection,
 		g_warning ("cannot connect to DBus: %s", error->message);
 		return;
 	}
+
+	/* dump startup profile data */
+	as_profile_dump (priv->profile);
 }
 
 /**
@@ -1529,6 +1539,7 @@ main (int argc, char *argv[])
 	priv->loop = g_main_loop_new (NULL, FALSE);
 	priv->pending = fu_pending_new ();
 	priv->store = as_store_new ();
+	priv->profile = as_profile_new ();
 	g_signal_connect (priv->store, "changed",
 			  G_CALLBACK (fu_main_store_changed_cb), priv);
 	as_store_set_watch_flags (priv->store, AS_STORE_WATCH_FLAG_ADDED |
@@ -1622,6 +1633,8 @@ out:
 			g_object_unref (priv->connection);
 		if (priv->authority != NULL)
 			g_object_unref (priv->authority);
+		if (priv->profile != NULL)
+			g_object_unref (priv->profile);
 		if (priv->store != NULL)
 			g_object_unref (priv->store);
 		if (priv->introspection_daemon != NULL)
