@@ -58,10 +58,6 @@ gboolean	 fu_cab_load_file			(FuCab		*cab,
 							 GFile		*file,
 							 GCancellable	*cancellable,
 							 GError		**error);
-gboolean	 fu_cab_save_file			(FuCab		*cab,
-							 GFile		*file,
-							 GCancellable	*cancellable,
-							 GError		**error);
 gboolean	 fu_cab_extract				(FuCab		*cab,
 							 FuCabExtractFlags flags,
 							 GError		**error);

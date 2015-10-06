@@ -30,7 +30,6 @@
 #include <gio/gunixinputstream.h>
 
 #include "fu-cleanup.h"
-#include "fu-cab.h"
 #include "fu-keyring.h"
 
 static void fu_cab_finalize			 (GObject *object);
@@ -345,60 +344,6 @@ fu_cab_load_fd (FuCab *cab, gint fd, GCancellable *cancellable, GError **error)
 
 	/* parse */
 	return fu_cab_parse (cab, error);
-}
-
-/**
- * fu_cab_save_file:
- **/
-gboolean
-fu_cab_save_file (FuCab *cab, GFile *file, GCancellable *cancellable, GError **error)
-{
-	FuCabPrivate *priv = GET_PRIVATE (cab);
-	const gchar *tmp;
-	guint i;
-	_cleanup_object_unref_ GCabCabinet *gcab = NULL;
-	_cleanup_object_unref_ GCabFolder *folder = NULL;
-	g_autoptr(GOutputStream) stream = NULL;
-
-	g_return_val_if_fail (FU_IS_CAB (cab), FALSE);
-
-	/* ensure all files are decompressed */
-	if (!fu_cab_extract (cab, FU_CAB_EXTRACT_FLAG_ALL, error))
-		return FALSE;
-
-	/* create a new archive, we can't reuse the existing instance */
-	gcab = gcab_cabinet_new ();
-	folder = gcab_folder_new (GCAB_COMPRESSION_NONE);
-	for (i = 0; i < priv->filelist->len; i++) {
-		g_autofree gchar *name = NULL;
-		_cleanup_object_unref_ GCabFile *gfile = NULL;
-		g_autoptr(GFile) file_tmp = NULL;
-
-		/* only write basename as name */
-		tmp = g_ptr_array_index (priv->filelist, i);
-		name = g_path_get_basename (tmp);
-
-		/* add each file in turn */
-		file_tmp = g_file_new_for_path (tmp);
-		gfile = gcab_file_new_with_file (name, file_tmp);
-		if (!gcab_folder_add_file (folder, gfile, FALSE,
-					   cancellable, error))
-			return FALSE;
-	}
-	if (!gcab_cabinet_add_folder (gcab, folder, error))
-		return FALSE;
-
-	/* write in one chunk */
-	stream = G_OUTPUT_STREAM (g_file_replace (file, NULL, FALSE,
-						  0, NULL, error));
-	if (stream == NULL)
-		return FALSE;
-	if (!gcab_cabinet_write_simple (gcab, stream,
-					NULL, NULL,
-					cancellable, error))
-		return FALSE;
-
-	return TRUE;
 }
 
 /**
