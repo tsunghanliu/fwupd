@@ -434,7 +434,7 @@ fu_main_update_helper (FuMainAuthHelper *helper, GError **error)
 
 	/* load store file which also decompresses firmware */
 	fu_main_set_status (helper->priv, FWUPD_STATUS_DECOMPRESSING);
-	if (!as_store_cab_from_data (helper->store, helper->blob_cab, NULL, error))
+	if (!as_store_from_bytes (helper->store, helper->blob_cab, NULL, error))
 		return FALSE;
 
 	/* if we've not chosen a device, try and find anything in the
@@ -1203,8 +1203,6 @@ fu_main_daemon_method_call (GDBusConnection *connection, const gchar *sender,
 
 		/* read the entire fd to a data blob */
 		stream = g_unix_input_stream_new (fd, TRUE);
-//		if (!g_seekable_seek (G_SEEKABLE (stream), 0, G_SEEK_SET, NULL, error))
-//			return FALSE;
 		blob_cab = g_input_stream_read_bytes (stream,
 						      FU_MAIN_FIRMWARE_SIZE_MAX,
 						      NULL, &error);
@@ -1311,7 +1309,7 @@ fu_main_daemon_method_call (GDBusConnection *connection, const gchar *sender,
 
 		/* load file */
 		store = as_store_new ();
-		if (!as_store_cab_from_data (store, blob_cab, NULL, &error)) {
+		if (!as_store_from_bytes (store, blob_cab, NULL, &error)) {
 			g_dbus_method_invocation_return_gerror (invocation, error);
 			return;
 		}
@@ -1321,14 +1319,16 @@ fu_main_daemon_method_call (GDBusConnection *connection, const gchar *sender,
 		if (apps->len == 0) {
 			g_dbus_method_invocation_return_error (invocation,
 							       FWUPD_ERROR,
-							       FWUPD_ERROR_INTERNAL,
+							       FWUPD_ERROR_INVALID_FILE,
 							       "no components");
+			return;
 		}
 		if (apps->len > 1) {
 			g_dbus_method_invocation_return_error (invocation,
 							       FWUPD_ERROR,
-							       FWUPD_ERROR_INTERNAL,
+							       FWUPD_ERROR_INVALID_FILE,
 							       "multiple components are not supported");
+			return;
 		}
 		app = AS_APP (g_ptr_array_index (apps, 0));
 
@@ -1346,6 +1346,7 @@ fu_main_daemon_method_call (GDBusConnection *connection, const gchar *sender,
 							       FWUPD_ERROR,
 							       FWUPD_ERROR_INTERNAL,
 							       "component has no GUID");
+			return;
 		}
 
 		/* verify trust */
