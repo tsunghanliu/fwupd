@@ -185,6 +185,7 @@ dnl - Makefiles, etc.
 dnl ---------------------------------------------------------------------------
 AC_CONFIG_FILES([
 Makefile
+libdfu/Makefile
 libfwupd/fwupd-version.h
 libfwupd/fwupd.pc
 libfwupd/Makefile
