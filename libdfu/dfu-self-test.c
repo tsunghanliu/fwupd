@@ -123,7 +123,8 @@ dfu_firmware_func (void)
 	g_assert_cmpint (dfu_firmware_get_format (firmware), ==, DFU_FORMAT_DFU_1_0);
 
 	/* load a DeFUse firmware */
-	filename2 = dfu_test_get_filename ("dev_VRBRAIN.dfu");
+//	filename2 = dfu_test_get_filename ("dev_VRBRAIN.dfu");
+	filename2 = g_strdup ("/home/hughsie/DSO BenF APP v3.64.dfu");
 	g_assert (filename2 != NULL);
 	file2 = g_file_new_for_path (filename2);
 	ret = dfu_firmware_parse_file (firmware, file2,

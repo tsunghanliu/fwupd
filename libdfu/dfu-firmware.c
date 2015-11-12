@@ -505,6 +505,30 @@ dfu_firmware_parse_inhx32 (GBytes *in, GError **error)
 	return g_bytes_new (string->str, string->len);
 }
 
+/* DfuSe header */
+typedef struct __attribute__((packed)) {
+	guint8		 sig[5];
+	guint8		 ver;
+	guint32		 image_size;
+	guint8		 targets;
+} DfuSePrefix;
+
+/* DfuSe image header */
+typedef struct __attribute__((packed)) {
+	guint8		 sig[6];
+	guint8		 alternate_setting;
+	guint32		 target_named;
+	gchar		 target_name[255];
+	guint32		 target_size;
+	guint32		 elements;
+} DfuSeImagePrefix;
+
+/* DfuSe element header */
+typedef struct __attribute__((packed)) {
+	guint32		 address;
+	guint32		 size;
+} DfuSeElementPrefix;
+
 /**
  * dfu_firmware_parse_data:
  * @firmware: a #DfuFirmware
@@ -532,6 +556,11 @@ dfu_firmware_parse_data (DfuFirmware *firmware, GBytes *bytes,
 	g_return_val_if_fail (DFU_IS_FIRMWARE (firmware), FALSE);
 	g_return_val_if_fail (bytes != NULL, FALSE);
 	g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+	/* sanity check */
+	g_assert_cmpint(sizeof(DfuSePrefix), ==, 11);
+	g_assert_cmpint(sizeof(DfuSeImagePrefix), ==, 274);
+	g_assert_cmpint(sizeof(DfuSeElementPrefix), ==, 8);
 
 	/* set defaults */
 	priv->vid = 0xffff;
@@ -586,6 +615,79 @@ dfu_firmware_parse_data (DfuFirmware *firmware, GBytes *bytes,
 				     crc_new, GUINT32_FROM_LE (ftr->crc));
 			return FALSE;
 		}
+	}
+
+	if (priv->format == DFU_FORMAT_DEFUSE) {
+		DfuSePrefix *prefix = (DfuSePrefix *) data;
+		guint i;
+		guint32 offset = sizeof(DfuSePrefix);
+
+		/* check the prefix (BE) */
+		if (memcmp (prefix->sig, "DfuSe", 5) != 0) {
+			g_set_error_literal (error,
+					     FWUPD_ERROR,
+					     FWUPD_ERROR_INTERNAL,
+					     "invalid DfuSe prefix");
+			return FALSE;
+		}
+
+		/* check the version */
+		if (prefix->ver != 0x01) {
+			g_set_error (error,
+				     FWUPD_ERROR,
+				     FWUPD_ERROR_INTERNAL,
+				     "invalid DfuSe version, got %02x",
+				     prefix->ver);
+			return FALSE;
+		}
+
+		/* check image size */
+		if (GUINT32_FROM_LE (prefix->image_size) != len - GUINT16_FROM_LE (ftr->len)) {
+			g_set_error (error,
+				     FWUPD_ERROR,
+				     FWUPD_ERROR_INTERNAL,
+				     "invalid DfuSe image size, got %u, expected %lu",
+				     GUINT32_FROM_LE (prefix->image_size),
+				     len - GUINT16_FROM_LE (ftr->len));
+			return FALSE;
+		}
+
+		g_print("targets: %i\n", prefix->targets);
+
+		/* parse the image targets */
+		for (i = 0; i < prefix->targets; i++) {
+			DfuSeImagePrefix *image;
+			guint j;
+			guint32 image_offset = offset + sizeof(DfuSeImagePrefix);
+
+			/* verify image target */
+			image = (DfuSeImagePrefix *) (data + offset);
+			if (memcmp (image->sig, "Target", 6) != 0) {
+				g_set_error_literal (error,
+						     FWUPD_ERROR,
+						     FWUPD_ERROR_INTERNAL,
+						     "invalid DfuSe target signature");
+				return FALSE;
+			}
+
+			g_print("target #%i\n", i);
+			g_print("alternate_setting %i\n", image->alternate_setting);
+			g_print("target_named %i\n", image->target_named);
+			g_print("target_name %s [%i][%i]\n", image->target_name, image->target_name[0], image->target_name[1]);
+			g_print("target_size %i\n", GUINT32_FROM_LE (image->target_size));
+			g_print("elements %i\n", GUINT32_FROM_LE (image->elements));
+
+			for (j = 0; j < image->elements; j++) {
+				DfuSeElementPrefix *element = NULL;
+				element = (DfuSeElementPrefix *) (data + image_offset);
+				g_print("element address 0x%04x\n", GUINT32_FROM_LE (element->address));
+				g_print("element size 0x%04x\n", GUINT32_FROM_LE (element->size));
+				image_offset += element->size + sizeof(DfuSeElementPrefix);
+			}
+			offset = image->target_size;
+		}
+
+		g_error ("MO");
 	}
 
 	/* copy */
