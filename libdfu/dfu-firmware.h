@@ -25,6 +25,8 @@
 #include <glib-object.h>
 #include <gio/gio.h>
 
+#include "dfu-image.h"
+
 G_BEGIN_DECLS
 
 #define DFU_TYPE_FIRMWARE (dfu_firmware_get_type ())
@@ -52,30 +54,34 @@ typedef enum {
 } DfuFirmwareParseFlags;
 
 /**
- * DfuFormat:
- * @DFU_FORMAT_UNKNOWN:			Version number unknown
- * @DFU_FORMAT_DFU_1_0:			DFU 1.0
- * @DFU_FORMAT_DEFUSE:			DfuSe extension detected
+ * DfuFirmwareFormat:
+ * @DFU_FIRMWARE_FORMAT_UNKNOWN:			Version number unknown
+ * @DFU_FIRMWARE_FORMAT_DFU_1_0:			DFU 1.0
+ * @DFU_FIRMWARE_FORMAT_DFUSE:				DfuSe extension detected
  *
  * The known versions of the DFU standard in BCD format.
  **/
 typedef enum {
-	DFU_FORMAT_UNKNOWN		= 0,
-	DFU_FORMAT_DFU_1_0		= 0x0100,
-	DFU_FORMAT_DEFUSE		= 0x011a,
+	DFU_FIRMWARE_FORMAT_UNKNOWN			= 0,
+	DFU_FIRMWARE_FORMAT_DFU_1_0			= 0x0100,
+	DFU_FIRMWARE_FORMAT_DFUSE			= 0x011a,
 	/* private */
-	DFU_FORMAT_LAST,
-} DfuFormat;
+	DFU_FIRMWARE_FORMAT_LAST,
+} DfuFirmwareFormat;
 
 DfuFirmware	*dfu_firmware_new		(void);
 
-GBytes		*dfu_firmware_get_contents	(DfuFirmware	*firmware);
+const gchar	*dfu_firmware_format_to_string	(DfuFirmwareFormat format);
+
+DfuImage	*dfu_firmware_get_image		(DfuFirmware	*firmware,
+						 guint8		 alt_setting);
+GPtrArray	*dfu_firmware_get_images	(DfuFirmware	*firmware);
 guint16		 dfu_firmware_get_vid		(DfuFirmware	*firmware);
 guint16		 dfu_firmware_get_pid		(DfuFirmware	*firmware);
 guint16		 dfu_firmware_get_release	(DfuFirmware	*firmware);
 guint16		 dfu_firmware_get_format	(DfuFirmware	*firmware);
-void		 dfu_firmware_set_contents	(DfuFirmware	*firmware,
-						 GBytes		*contents);
+void		 dfu_firmware_add_image		(DfuFirmware	*firmware,
+						 DfuImage	*image);
 void		 dfu_firmware_set_vid		(DfuFirmware	*firmware,
 						 guint16	 vid);
 void		 dfu_firmware_set_pid		(DfuFirmware	*firmware,
@@ -83,9 +89,7 @@ void		 dfu_firmware_set_pid		(DfuFirmware	*firmware,
 void		 dfu_firmware_set_release	(DfuFirmware	*firmware,
 						 guint16	 release);
 void		 dfu_firmware_set_format	(DfuFirmware	*firmware,
-						 guint16	 format);
-void		 dfu_firmware_set_target_size	(DfuFirmware	*firmware,
-						 guint32	 target_size);
+						 DfuFirmwareFormat format);
 
 gboolean	 dfu_firmware_parse_data	(DfuFirmware	*firmware,
 						 GBytes		*bytes,

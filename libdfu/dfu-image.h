@@ -19,23 +19,37 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
-/**
- * SECTION:dfu
- * @short_description: Helper objects for interacting with DFU devices.
- */
+#ifndef __DFU_IMAGE_H
+#define __DFU_IMAGE_H
 
-#ifndef __DFU_H__
-#define __DFU_H__
+#include <glib-object.h>
+#include <gio/gio.h>
 
-#define __DFU_H_INSIDE__
+G_BEGIN_DECLS
 
-#include <libdfu/dfu-common.h>
-#include <libdfu/dfu-device.h>
-#include <libdfu/dfu-firmware.h>
-#include <libdfu/dfu-image.h>
-#include <libdfu/dfu-target.h>
+#define DFU_TYPE_IMAGE (dfu_image_get_type ())
+G_DECLARE_DERIVABLE_TYPE (DfuImage, dfu_image, DFU, IMAGE, GObject)
 
-#undef __DFU_H_INSIDE__
+struct _DfuImageClass
+{
+	GObjectClass		 parent_class;
+};
 
-#endif /* __DFU_H__ */
+DfuImage	*dfu_image_new		(void);
 
+GBytes		*dfu_image_get_contents		(DfuImage	*image);
+guint8		 dfu_image_get_alt_setting	(DfuImage	*image);
+const gchar	*dfu_image_get_name		(DfuImage	*image);
+void		 dfu_image_set_contents		(DfuImage	*image,
+						 GBytes		*contents);
+void		 dfu_image_set_alt_setting	(DfuImage	*image,
+						 guint8		 alt_setting);
+void		 dfu_image_set_target_size	(DfuImage	*image,
+						 guint32	 target_size);
+void		 dfu_image_set_name		(DfuImage	*image,
+						 const gchar	*name);
+gchar		*dfu_image_to_string		(DfuImage	*image);
+
+G_END_DECLS
+
+#endif /* __DFU_IMAGE_H */

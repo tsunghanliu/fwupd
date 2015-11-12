@@ -59,12 +59,14 @@ dfu_enums_func (void)
 static void
 dfu_firmware_func (void)
 {
+	DfuImage *image_tmp;
 	gchar buf[256];
 	guint i;
 	gboolean ret;
 	g_autofree gchar *filename1 = NULL;
 	g_autofree gchar *filename2 = NULL;
 	g_autoptr(DfuFirmware) firmware = NULL;
+	g_autoptr(DfuImage) image = NULL;
 	g_autoptr(GBytes) data = NULL;
 	g_autoptr(GBytes) fw = NULL;
 	g_autoptr(GBytes) no_suffix_contents = NULL;
@@ -86,15 +88,21 @@ dfu_firmware_func (void)
 	g_assert_cmpint (dfu_firmware_get_vid (firmware), ==, 0xffff);
 	g_assert_cmpint (dfu_firmware_get_pid (firmware), ==, 0xffff);
 	g_assert_cmpint (dfu_firmware_get_release (firmware), ==, 0xffff);
-	no_suffix_contents = dfu_firmware_get_contents (firmware);
+	image_tmp = dfu_firmware_get_image (firmware, 0xfe);
+	g_assert (image_tmp == NULL);
+	image_tmp = dfu_firmware_get_image (firmware, 0);
+	g_assert (image_tmp != NULL);
+	no_suffix_contents = dfu_image_get_contents (image_tmp);
 	g_assert_cmpint (g_bytes_compare (no_suffix_contents, fw), ==, 0);
 
-	/* write firmware format */
+	/* write DFU format */
 	firmware = dfu_firmware_new ();
 	dfu_firmware_set_vid (firmware, 0x1234);
 	dfu_firmware_set_pid (firmware, 0x5678);
 	dfu_firmware_set_release (firmware, 0xfedc);
-	dfu_firmware_set_contents (firmware, fw);
+	image = dfu_image_new ();
+	dfu_image_set_contents (image, fw);
+	dfu_firmware_add_image (firmware, image);
 	data = dfu_firmware_write_data (firmware, &error);
 	g_assert_no_error (error);
 	g_assert (data != NULL);
@@ -106,7 +114,7 @@ dfu_firmware_func (void)
 	g_assert_cmpint (dfu_firmware_get_vid (firmware), ==, 0x1234);
 	g_assert_cmpint (dfu_firmware_get_pid (firmware), ==, 0x5678);
 	g_assert_cmpint (dfu_firmware_get_release (firmware), ==, 0xfedc);
-	g_assert_cmpint (dfu_firmware_get_format (firmware), ==, DFU_FORMAT_DFU_1_0);
+	g_assert_cmpint (dfu_firmware_get_format (firmware), ==, DFU_FIRMWARE_FORMAT_DFU_1_0);
 
 	/* load a real firmware */
 	filename1 = dfu_test_get_filename ("kiibohd.dfu.bin");
@@ -120,11 +128,10 @@ dfu_firmware_func (void)
 	g_assert_cmpint (dfu_firmware_get_vid (firmware), ==, 0x1c11);
 	g_assert_cmpint (dfu_firmware_get_pid (firmware), ==, 0xb007);
 	g_assert_cmpint (dfu_firmware_get_release (firmware), ==, 0xffff);
-	g_assert_cmpint (dfu_firmware_get_format (firmware), ==, DFU_FORMAT_DFU_1_0);
+	g_assert_cmpint (dfu_firmware_get_format (firmware), ==, DFU_FIRMWARE_FORMAT_DFU_1_0);
 
 	/* load a DeFUse firmware */
-//	filename2 = dfu_test_get_filename ("dev_VRBRAIN.dfu");
-	filename2 = g_strdup ("/home/hughsie/DSO BenF APP v3.64.dfu");
+	filename2 = dfu_test_get_filename ("dev_VRBRAIN.dfu");
 	g_assert (filename2 != NULL);
 	file2 = g_file_new_for_path (filename2);
 	ret = dfu_firmware_parse_file (firmware, file2,
@@ -135,7 +142,7 @@ dfu_firmware_func (void)
 	g_assert_cmpint (dfu_firmware_get_vid (firmware), ==, 0x0483);
 	g_assert_cmpint (dfu_firmware_get_pid (firmware), ==, 0x0000);
 	g_assert_cmpint (dfu_firmware_get_release (firmware), ==, 0x0000);
-	g_assert_cmpint (dfu_firmware_get_format (firmware), ==, DFU_FORMAT_DEFUSE);
+	g_assert_cmpint (dfu_firmware_get_format (firmware), ==, DFU_FIRMWARE_FORMAT_DFUSE);
 }
 
 static void
