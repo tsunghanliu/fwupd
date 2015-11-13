@@ -391,10 +391,9 @@ dfu_tool_reset (DfuToolPrivate *priv, gchar **values, GError **error)
 			      NULL, error))
 		return FALSE;
 
-	if (!dfu_target_reset (target, error))
+	if (!dfu_device_reset (device, error))
 		return FALSE;
 
-	return EXIT_SUCCESS;
 	return TRUE;
 }
 
@@ -436,7 +435,7 @@ dfu_tool_upload (DfuToolPrivate *priv, gchar **values, GError **error)
 
 	/* APP -> DFU */
 	if (dfu_target_get_mode (target) == DFU_MODE_RUNTIME) {
-		if (!dfu_target_wait_for_reset (target, 5000, NULL, error))
+		if (!dfu_device_wait_for_replug (device, 5000, NULL, error))
 			return FALSE;
 		flags |= DFU_TARGET_TRANSFER_FLAG_BOOT_RUNTIME;
 	}
@@ -450,8 +449,8 @@ dfu_tool_upload (DfuToolPrivate *priv, gchar **values, GError **error)
 	/* create new firmware object */
 	firmware = dfu_firmware_new ();
 	dfu_firmware_set_format (firmware, DFU_FIRMWARE_FORMAT_DFU_1_0);
-	dfu_firmware_set_vid (firmware, dfu_target_get_runtime_vid (target));
-	dfu_firmware_set_pid (firmware, dfu_target_get_runtime_pid (target));
+	dfu_firmware_set_vid (firmware, dfu_device_get_runtime_vid (device));
+	dfu_firmware_set_pid (firmware, dfu_device_get_runtime_pid (device));
 	dfu_firmware_add_image (firmware, image);
 
 	/* save file */
@@ -605,7 +604,7 @@ dfu_tool_download (DfuToolPrivate *priv, gchar **values, GError **error)
 		g_debug ("detaching");
 		if (!dfu_target_detach (target, NULL, error))
 			return FALSE;
-		if (!dfu_target_wait_for_reset (target, 5000, NULL, error))
+		if (!dfu_device_wait_for_replug (device, 5000, NULL, error))
 			return FALSE;
 	}
 
@@ -615,24 +614,24 @@ dfu_tool_download (DfuToolPrivate *priv, gchar **values, GError **error)
 
 	/* check vendor matches */
 	if (dfu_firmware_get_vid (firmware) != 0xffff &&
-	    dfu_target_get_runtime_pid (target) != 0xffff &&
-	    dfu_firmware_get_vid (firmware) != dfu_target_get_runtime_vid (target)) {
+	    dfu_device_get_runtime_pid (device) != 0xffff &&
+	    dfu_firmware_get_vid (firmware) != dfu_device_get_runtime_vid (device)) {
 		g_print ("Vendor ID incorrect, expected 0x%04x got 0x%04x\n",
 			 dfu_firmware_get_vid (firmware),
-			 dfu_target_get_runtime_vid (target));
+			 dfu_device_get_runtime_vid (device));
 		return EXIT_FAILURE;
 	}
 
 	/* check product matches */
 	if (dfu_firmware_get_pid (firmware) != 0xffff &&
-	    dfu_target_get_runtime_pid (target) != 0xffff &&
-	    dfu_firmware_get_pid (firmware) != dfu_target_get_runtime_pid (target)) {
+	    dfu_device_get_runtime_pid (device) != 0xffff &&
+	    dfu_firmware_get_pid (firmware) != dfu_device_get_runtime_pid (device)) {
 		g_set_error (error,
 			     FWUPD_ERROR,
 			     FWUPD_ERROR_INTERNAL,
 			     "Product ID incorrect, expected 0x%04x got 0x%04x",
 			     dfu_firmware_get_pid (firmware),
-			     dfu_target_get_runtime_pid (target));
+			     dfu_device_get_runtime_pid (device));
 		return FALSE;
 	}
 

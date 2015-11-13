@@ -338,12 +338,15 @@ dfu_colorhug_plus_func (void)
 		g_assert (ret);
 
 		/* wait for it to come back as 273f:1005 */
-		ret = dfu_target_wait_for_reset (target2, 2000, NULL, &error);
+		ret = dfu_device_wait_for_replug (device2, 2000, NULL, &error);
 		g_assert_no_error (error);
 		g_assert (ret);
 
 		/* close it */
 		ret = dfu_target_close (target2, &error);
+		g_assert_no_error (error);
+		g_assert (ret);
+		ret = dfu_device_close (device2, &error);
 		g_assert_no_error (error);
 		g_assert (ret);
 	}
@@ -364,8 +367,8 @@ dfu_colorhug_plus_func (void)
 	g_assert (target != NULL);
 
 	/* we don't know this yet */
-	g_assert_cmpint (dfu_target_get_runtime_vid (target), ==, 0xffff);
-	g_assert_cmpint (dfu_target_get_runtime_pid (target), ==, 0xffff);
+	g_assert_cmpint (dfu_device_get_runtime_vid (device), ==, 0xffff);
+	g_assert_cmpint (dfu_device_get_runtime_pid (device), ==, 0xffff);
 
 	/* open it */
 	ret = dfu_target_open (target, DFU_TARGET_OPEN_FLAG_NONE, NULL, &error);
@@ -392,13 +395,13 @@ dfu_colorhug_plus_func (void)
 	g_assert (ret);
 
 	/* wait for it to come back as 273f:1004 */
-	ret = dfu_target_wait_for_reset (target, 2000, NULL, &error);
+	ret = dfu_device_wait_for_replug (device, 2000, NULL, &error);
 	g_assert_no_error (error);
 	g_assert (ret);
 
 	/* we should know now */
-	g_assert_cmpint (dfu_target_get_runtime_vid (target), ==, 0x273f);
-	g_assert_cmpint (dfu_target_get_runtime_pid (target), ==, 0x1002);
+	g_assert_cmpint (dfu_device_get_runtime_vid (device), ==, 0x273f);
+	g_assert_cmpint (dfu_device_get_runtime_pid (device), ==, 0x1002);
 
 	/* close it */
 	ret = dfu_target_close (target, &error);

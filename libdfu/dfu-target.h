@@ -112,19 +112,11 @@ gboolean	 dfu_target_download			(DfuTarget	*target,
 							 DfuProgressCallback progress_cb,
 							 gpointer	 progress_cb_data,
 							 GError		**error);
-gboolean	 dfu_target_reset			(DfuTarget	*target,
-							 GError		**error);
-gboolean	 dfu_target_wait_for_reset		(DfuTarget	*target,
-							 guint		 max_ms,
-							 GCancellable	*cancellable,
-							 GError		**error);
 void		 dfu_target_set_timeout			(DfuTarget	*target,
 							 guint		 timeout_ms);
 guint8		 dfu_target_get_interface_number	(DfuTarget	*target);
 guint8		 dfu_target_get_interface_alt_setting	(DfuTarget	*target);
 const gchar	*dfu_target_get_interface_alt_name	(DfuTarget	*target);
-guint16		 dfu_target_get_runtime_vid		(DfuTarget	*target);
-guint16		 dfu_target_get_runtime_pid		(DfuTarget	*target);
 guint16		 dfu_target_get_transfer_size		(DfuTarget	*target);
 void		 dfu_target_set_transfer_size		(DfuTarget	*target,
 							 guint16	 transfer_size);

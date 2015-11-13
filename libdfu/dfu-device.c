@@ -32,7 +32,7 @@
 #include <string.h>
 
 #include "dfu-common.h"
-#include "dfu-device.h"
+#include "dfu-device-private.h"
 #include "dfu-target-private.h"
 
 static void dfu_device_finalize			 (GObject *object);
@@ -43,7 +43,11 @@ static void dfu_device_finalize			 (GObject *object);
  * Private #DfuDevice data
  **/
 typedef struct {
+	GUsbDevice		*dev;
 	GPtrArray		*targets;
+	gboolean		 device_open;
+	guint16			 runtime_pid;
+	guint16			 runtime_vid;
 } DfuDevicePrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE (DfuDevice, dfu_device, G_TYPE_OBJECT)
@@ -66,6 +70,8 @@ static void
 dfu_device_init (DfuDevice *device)
 {
 	DfuDevicePrivate *priv = GET_PRIVATE (device);
+	priv->runtime_vid = 0xffff;
+	priv->runtime_pid = 0xffff;
 	priv->targets = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
 }
 
@@ -78,16 +84,22 @@ dfu_device_finalize (GObject *object)
 	DfuDevice *device = DFU_DEVICE (object);
 	DfuDevicePrivate *priv = GET_PRIVATE (device);
 
+	/* don't rely on this */
+	if (priv->device_open) {
+		g_debug ("auto-closing DfuDevice, call dfu_device_close()");
+		g_usb_device_close (priv->dev, NULL);
+	}
+
 	g_ptr_array_unref (priv->targets);
 
 	G_OBJECT_CLASS (dfu_device_parent_class)->finalize (object);
 }
 
 /**
- * dfu_device_set_dev:
+ * dfu_device_add_targets:
  **/
 static gboolean
-dfu_device_set_dev (DfuDevice *device, GUsbDevice *dev)
+dfu_device_add_targets (DfuDevice *device)
 {
 	DfuDevicePrivate *priv = GET_PRIVATE (device);
 	guint i;
@@ -95,7 +107,7 @@ dfu_device_set_dev (DfuDevice *device, GUsbDevice *dev)
 	g_autoptr(GPtrArray) ifaces = NULL;
 
 	/* add all DFU-capable targets */
-	ifaces = g_usb_device_get_interfaces (dev, NULL);
+	ifaces = g_usb_device_get_interfaces (priv->dev, NULL);
 	if (ifaces == NULL)
 		return FALSE;
 	g_ptr_array_set_size (priv->targets, 0);
@@ -106,7 +118,7 @@ dfu_device_set_dev (DfuDevice *device, GUsbDevice *dev)
 			continue;
 		if (g_usb_interface_get_subclass (iface) != 0x01)
 			continue;
-		target = dfu_target_new (dev, iface);
+		target = dfu_target_new (device, iface);
 		if (target == NULL)
 			continue;
 		g_ptr_array_add (priv->targets, target);
@@ -126,9 +138,12 @@ dfu_device_set_dev (DfuDevice *device, GUsbDevice *dev)
 DfuDevice *
 dfu_device_new (GUsbDevice *dev)
 {
+	DfuDevicePrivate *priv;
 	DfuDevice *device;
 	device = g_object_new (DFU_TYPE_DEVICE, NULL);
-	if (!dfu_device_set_dev (device, dev)) {
+	priv = GET_PRIVATE (device);
+	priv->dev = g_object_ref (dev);
+	if (!dfu_device_add_targets (device)) {
 		g_object_unref (device);
 		return NULL;
 	}
@@ -225,4 +240,299 @@ dfu_device_get_target_by_alt_name (DfuDevice *device, const gchar *alt_name, GEr
 		     "No target with alt-name %s",
 		     alt_name);
 	return NULL;
+}
+
+/**
+ * dfu_device_get_runtime_vid:
+ * @device: a #DfuDevice
+ *
+ * Gets the runtime vendor ID.
+ *
+ * Return value: vendor ID, or 0xffff for unknown
+ *
+ * Since: 0.5.4
+ **/
+guint16
+dfu_device_get_runtime_vid (DfuDevice *device)
+{
+	DfuDevicePrivate *priv = GET_PRIVATE (device);
+	g_return_val_if_fail (DFU_IS_DEVICE (device), 0xffff);
+	return priv->runtime_vid;
+}
+
+/**
+ * dfu_device_get_runtime_pid:
+ * @device: a #DfuDevice
+ *
+ * Gets the runtime product ID.
+ *
+ * Return value: product ID, or 0xffff for unknown
+ *
+ * Since: 0.5.4
+ **/
+guint16
+dfu_device_get_runtime_pid (DfuDevice *device)
+{
+	DfuDevicePrivate *priv = GET_PRIVATE (device);
+	g_return_val_if_fail (DFU_IS_DEVICE (device), 0xffff);
+	return priv->runtime_pid;
+}
+
+/**
+ * dfu_device_set_runtime_vid:
+ * @device: a #DfuDevice
+ * @runtime_vid: a vendor ID, or 0xffff for unknown
+ *
+ * Sets the runtime vendor ID.
+ *
+ * Since: 0.5.4
+ **/
+void
+dfu_device_set_runtime_vid (DfuDevice *device, guint16 runtime_vid)
+{
+	DfuDevicePrivate *priv = GET_PRIVATE (device);
+	g_return_if_fail (DFU_IS_DEVICE (device));
+	priv->runtime_vid = runtime_vid;
+}
+
+/**
+ * dfu_device_set_runtime_pid:
+ * @device: a #DfuDevice
+ * @runtime_vid: a product ID, or 0xffff for unknown
+ *
+ * Sets the runtime product ID.
+ *
+ * Since: 0.5.4
+ **/
+void
+dfu_device_set_runtime_pid (DfuDevice *device, guint16 runtime_pid)
+{
+	DfuDevicePrivate *priv = GET_PRIVATE (device);
+	g_return_if_fail (DFU_IS_DEVICE (device));
+	priv->runtime_pid = runtime_pid;
+}
+
+/**
+ * dfu_device_get_usb_dev: (skip)
+ **/
+GUsbDevice *
+dfu_device_get_usb_dev (DfuDevice *device)
+{
+	DfuDevicePrivate *priv = GET_PRIVATE (device);
+	g_return_val_if_fail (DFU_IS_DEVICE (device), NULL);
+	return priv->dev;
+}
+
+/**
+ * dfu_device_open:
+ * @device: a #DfuDevice
+ * @error: a #GError, or %NULL
+ *
+ * Opens a DFU-capable device.
+ *
+ * Return value: %TRUE for success
+ *
+ * Since: 0.5.4
+ **/
+gboolean
+dfu_device_open (DfuDevice *device, GError **error)
+{
+	DfuDevicePrivate *priv = GET_PRIVATE (device);
+	g_autoptr(GError) error_local = NULL;
+
+	g_return_val_if_fail (DFU_IS_DEVICE (device), FALSE);
+	g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+	/* just ignore */
+	if (priv->device_open)
+		return TRUE;
+
+	/* open */
+	if (!g_usb_device_open (priv->dev, &error_local)) {
+		g_set_error (error,
+			     FWUPD_ERROR,
+			     FWUPD_ERROR_INTERNAL,
+			     "cannot open device %s: %s",
+			     g_usb_device_get_platform_id (priv->dev),
+			     error_local->message);
+		return FALSE;
+	}
+	priv->device_open = TRUE;
+
+	return TRUE;
+}
+
+/**
+ * dfu_device_close:
+ * @device: a #DfuDevice
+ * @error: a #GError, or %NULL
+ *
+ * Closes a DFU device.
+ *
+ * Return value: %TRUE for success
+ *
+ * Since: 0.5.4
+ **/
+gboolean
+dfu_device_close (DfuDevice *device, GError **error)
+{
+	DfuDevicePrivate *priv = GET_PRIVATE (device);
+
+	/* only close if open */
+	if (priv->device_open) {
+		if (!g_usb_device_close (priv->dev, error))
+			return FALSE;
+		priv->device_open = FALSE;
+	}
+	return TRUE;
+}
+
+/**
+ * dfu_device_set_new_usb_dev:
+ **/
+static gboolean
+dfu_device_set_new_usb_dev (DfuDevice *device, GUsbDevice *dev,
+			    GCancellable *cancellable, GError **error)
+{
+	DfuDevicePrivate *priv = GET_PRIVATE (device);
+	guint i;
+	GUsbInterface *iface;
+	g_autoptr(GPtrArray) ifaces = NULL;
+
+	/* mark all existing interfaces as unclaimed */
+	for (i = 0; i < priv->targets->len; i++) {
+		DfuTarget *target = g_ptr_array_index (priv->targets, i);
+		dfu_target_close (target, NULL);
+	}
+
+	/* close existing device */
+	if (!dfu_device_close (device, error))
+		return FALSE;
+
+	/* set the new USB device */
+	g_set_object (&priv->dev, dev);
+
+	/* update each interface */
+	ifaces = g_usb_device_get_interfaces (dev, error);
+	if (ifaces == NULL)
+		return FALSE;
+	for (i = 0; i < ifaces->len; i++) {
+		guint8 alt_setting;
+		g_autoptr(DfuTarget) target = NULL;
+		iface = g_ptr_array_index (ifaces, i);
+		if (g_usb_interface_get_class (iface) != G_USB_DEVICE_CLASS_APPLICATION_SPECIFIC)
+			continue;
+		if (g_usb_interface_get_subclass (iface) != 0x01)
+			continue;
+		alt_setting = g_usb_interface_get_alternate (iface);
+		target = dfu_device_get_target_by_alt_setting (device, alt_setting, NULL);
+		if (target == NULL)
+			continue;
+		if (!dfu_target_update (target, iface, cancellable, error))
+			return FALSE;
+	}
+	return dfu_device_open (device, error);
+}
+
+/**
+ * dfu_device_wait_for_replug:
+ * @device: a #DfuDevice
+ * @timeout: the maximum amount of time to wait
+ * @cancellable: a #GCancellable, or %NULL
+ * @error: a #GError, or %NULL
+ *
+ * Waits for a DFU device to disconnect and reconnect.
+ *
+ * Return value: %TRUE for success
+ *
+ * Since: 0.5.4
+ **/
+gboolean
+dfu_device_wait_for_replug (DfuDevice *device, guint timeout,
+			    GCancellable *cancellable, GError **error)
+{
+	DfuDevicePrivate *priv = GET_PRIVATE (device);
+	const guint poll_interval_ms = 100;
+	gboolean went_away = FALSE;
+	guint16 pid;
+	guint16 vid;
+	guint i;
+	g_autofree gchar *platform_id = NULL;
+	g_autoptr(GUsbContext) usb_ctx = NULL;
+
+	g_return_val_if_fail (DFU_IS_DEVICE (device), FALSE);
+	g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+	/* keep copies */
+	platform_id = g_strdup (g_usb_device_get_platform_id (priv->dev));
+	vid = g_usb_device_get_vid (priv->dev);
+	pid = g_usb_device_get_pid (priv->dev);
+
+	/* keep trying */
+	g_object_get (priv->dev, "context", &usb_ctx, NULL);
+	for (i = 0; i < timeout / poll_interval_ms; i++) {
+		g_autoptr(GUsbDevice) dev_tmp = NULL;
+		g_usleep (poll_interval_ms * 1000);
+		g_usb_context_enumerate (usb_ctx);
+		dev_tmp = g_usb_context_find_by_platform_id (usb_ctx, platform_id, NULL);
+		if (dev_tmp == NULL) {
+			went_away = TRUE;
+			continue;
+		}
+
+		/* VID:PID changed so find a DFU iface with the same alt */
+		if (vid != g_usb_device_get_vid (dev_tmp) ||
+		    pid != g_usb_device_get_pid (dev_tmp)) {
+			return dfu_device_set_new_usb_dev (device, dev_tmp,
+							   cancellable, error);
+		}
+	}
+
+	/* target went off into the woods */
+	if (went_away) {
+		g_set_error_literal (error,
+				     FWUPD_ERROR,
+				     FWUPD_ERROR_INTERNAL,
+				     "target went away but did not come back");
+		return FALSE;
+	}
+
+	/* VID and PID did not change */
+	g_set_error_literal (error,
+			     FWUPD_ERROR,
+			     FWUPD_ERROR_INTERNAL,
+			     "target came back with same VID:PID values");
+	return FALSE;
+}
+
+/**
+ * dfu_device_reset:
+ * @device: a #DfuDevice
+ * @error: a #GError, or %NULL
+ *
+ * Resets the USB device.
+ *
+ * Return value: %TRUE for success
+ *
+ * Since: 0.5.4
+ **/
+gboolean
+dfu_device_reset (DfuDevice *device, GError **error)
+{
+	DfuDevicePrivate *priv = GET_PRIVATE (device);
+	g_autoptr(GError) error_local = NULL;
+
+	g_return_val_if_fail (DFU_IS_DEVICE (device), FALSE);
+	g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+	if (!g_usb_device_reset (priv->dev, &error_local)) {
+		g_set_error (error,
+			     FWUPD_ERROR,
+			     FWUPD_ERROR_INTERNAL,
+			     "cannot reset USB device: %s [%i]",
+			     error_local->message,
+			     error_local->code);
+		return FALSE;
+	}
+	return TRUE;
 }

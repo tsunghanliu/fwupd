@@ -290,7 +290,7 @@ fu_provider_usb_update (FuProvider *provider,
 	if (dfu_target_get_mode (dfu_target) == DFU_MODE_RUNTIME) {
 		if (!dfu_target_detach (dfu_target, NULL, error))
 			return FALSE;
-		if (!dfu_target_wait_for_reset (dfu_target, 5000, NULL, error))
+		if (!dfu_device_wait_for_replug (dfu_device, 5000, NULL, error))
 			return FALSE;
 	}
 
@@ -410,7 +410,7 @@ fu_provider_usb_verify (FuProvider *provider,
 	if (dfu_target_get_mode (dfu_target) == DFU_MODE_RUNTIME) {
 		if (!dfu_target_detach (dfu_target, NULL, error))
 			return FALSE;
-		if (!dfu_target_wait_for_reset (dfu_target, 5000, NULL, error))
+		if (!dfu_device_wait_for_replug (dfu_device, 5000, NULL, error))
 			return FALSE;
 	}
 
