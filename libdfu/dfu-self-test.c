@@ -100,6 +100,7 @@ dfu_self_test_get_bytes_for_file (GFile *file, GError **error)
 static void
 dfu_firmware_raw_func (void)
 {
+	DfuElement *element;
 	DfuImage *image_tmp;
 	gchar buf[256];
 	guint i;
@@ -130,7 +131,10 @@ dfu_firmware_raw_func (void)
 	g_assert (image_tmp == NULL);
 	image_tmp = dfu_firmware_get_image (firmware, 0);
 	g_assert (image_tmp != NULL);
-	no_suffix_contents = dfu_image_get_contents (image_tmp);
+	element = dfu_image_get_element (image_tmp, 0);
+	g_assert (element != NULL);
+	no_suffix_contents = dfu_element_get_contents (element);
+	g_assert (no_suffix_contents != NULL);
 	g_assert_cmpint (g_bytes_compare (no_suffix_contents, fw), ==, 0);
 
 	/* can we roundtrip without adding data */
@@ -149,6 +153,7 @@ dfu_firmware_dfu_func (void)
 	g_autofree gchar *filename = NULL;
 	g_autoptr(DfuFirmware) firmware = NULL;
 	g_autoptr(DfuImage) image = NULL;
+	g_autoptr(DfuElement) element = NULL;
 	g_autoptr(GBytes) data = NULL;
 	g_autoptr(GBytes) fw = NULL;
 	g_autoptr(GBytes) roundtrip_orig = NULL;
@@ -170,7 +175,9 @@ dfu_firmware_dfu_func (void)
 	dfu_firmware_set_pid (firmware, 0x5678);
 	dfu_firmware_set_release (firmware, 0xfedc);
 	image = dfu_image_new ();
-	dfu_image_set_contents (image, fw);
+	element = dfu_element_new ();
+	dfu_element_set_contents (element, fw);
+	dfu_image_add_element (image, element);
 	dfu_firmware_add_image (firmware, image);
 	data = dfu_firmware_write_data (firmware, &error);
 	g_assert_no_error (error);
@@ -244,6 +251,11 @@ dfu_firmware_dfuse_func (void)
 	roundtrip = dfu_firmware_write_data (firmware, &error);
 	g_assert_no_error (error);
 	g_assert (roundtrip != NULL);
+
+//	g_file_set_contents ("/tmp/1.bin",
+//			     g_bytes_get_data (roundtrip, NULL),
+//			     g_bytes_get_size (roundtrip), NULL);
+
 	g_assert_cmpstr (_g_bytes_compare_verbose (roundtrip, roundtrip_orig), ==, NULL);
 }
 

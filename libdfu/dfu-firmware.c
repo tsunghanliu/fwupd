@@ -527,6 +527,7 @@ typedef struct __attribute__((packed)) {
 static gboolean
 dfu_firmware_add_inhx32 (DfuFirmware *firmware, GBytes *bytes, GError **error)
 {
+	g_autoptr(DfuElement) element = NULL;
 	g_autoptr(DfuImage) image = NULL;
 	g_autoptr(GBytes) contents = NULL;
 
@@ -537,7 +538,9 @@ dfu_firmware_add_inhx32 (DfuFirmware *firmware, GBytes *bytes, GError **error)
 
 	/* add single image */
 	image = dfu_image_new ();
-	dfu_image_set_contents (image, contents);
+	element = dfu_element_new ();
+	dfu_element_set_contents (element, contents);
+	dfu_image_add_element (image, element);
 	dfu_firmware_add_image (firmware, image);
 	return TRUE;
 }
@@ -548,9 +551,12 @@ dfu_firmware_add_inhx32 (DfuFirmware *firmware, GBytes *bytes, GError **error)
 static gboolean
 dfu_firmware_add_binary (DfuFirmware *firmware, GBytes *bytes, GError **error)
 {
+	g_autoptr(DfuElement) element = NULL;
 	g_autoptr(DfuImage) image = NULL;
 	image = dfu_image_new ();
-	dfu_image_set_contents (image, bytes);
+	element = dfu_element_new ();
+	dfu_element_set_contents (element, bytes);
+	dfu_image_add_element (image, element);
 	dfu_firmware_add_image (firmware, image);
 	return TRUE;
 }
@@ -601,14 +607,16 @@ dfu_firmware_add_dfuse (DfuFirmware *firmware, GBytes *bytes, GError **error)
 
 	/* parse the image targets */
 	for (i = 0; i < prefix->targets; i++) {
+		guint consumed;
 		g_autoptr(DfuImage) image = NULL;
 		image = dfu_image_from_dfuse (data + offset,
 					      len - offset,
+					      &consumed,
 					      error);
 		if (image == NULL)
 			return FALSE;
 		dfu_firmware_add_image (firmware, image);
-		offset = g_bytes_get_size (dfu_image_get_contents (image));
+		offset += consumed;
 	}
 	return TRUE;
 }
@@ -863,18 +871,24 @@ dfu_firmware_write_data (DfuFirmware *firmware, GError **error)
 	/* raw */
 	if (priv->format == DFU_FIRMWARE_FORMAT_RAW) {
 		GBytes *contents;
+		DfuElement *element;
 		image = dfu_firmware_get_image (firmware, 0);
 		g_assert (image != NULL);
-		contents = dfu_image_get_contents (image);
+		element = dfu_image_get_element (image, 0);
+		g_assert (element != NULL);
+		contents = dfu_element_get_contents (element);
 		return g_bytes_ref (contents);
 	}
 
 	/* plain-old DFU */
 	if (priv->format == DFU_FIRMWARE_FORMAT_DFU_1_0) {
 		GBytes *contents;
+		DfuElement *element;
 		image = dfu_firmware_get_image (firmware, 0);
 		g_assert (image != NULL);
-		contents = dfu_image_get_contents (image);
+		element = dfu_image_get_element (image, 0);
+		g_assert (element != NULL);
+		contents = dfu_element_get_contents (element);
 		g_assert (contents != NULL);
 		return dfu_firmware_add_footer (firmware, contents);
 	}
@@ -961,17 +975,17 @@ dfu_firmware_to_string (DfuFirmware *firmware)
 	g_return_val_if_fail (DFU_IS_FIRMWARE (firmware), NULL);
 
 	str = g_string_new ("");
-	g_string_append_printf (str, "vid:      0x%04x\n", priv->vid);
-	g_string_append_printf (str, "pid:      0x%04x\n", priv->pid);
-	g_string_append_printf (str, "release:  0x%04x\n", priv->release);
-	g_string_append_printf (str, "format:   %s [0x%04x]\n",
+	g_string_append_printf (str, "vid:         0x%04x\n", priv->vid);
+	g_string_append_printf (str, "pid:         0x%04x\n", priv->pid);
+	g_string_append_printf (str, "release:     0x%04x\n", priv->release);
+	g_string_append_printf (str, "format:      %s [0x%04x]\n",
 				dfu_firmware_format_to_string (priv->format),
 				priv->format);
 	for (i = 0; i < priv->images->len; i++) {
 		g_autofree gchar *tmp = NULL;
 		image = g_ptr_array_index (priv->images, i);
 		tmp = dfu_image_to_string (image);
-		g_string_append_printf (str, "=== IMAGE %i ===\n", i);
+		g_string_append_printf (str, "= IMAGE %i =\n", i);
 		g_string_append_printf (str, "%s\n", tmp);
 	}
 

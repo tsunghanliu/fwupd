@@ -349,6 +349,7 @@ dfu_tool_convert (DfuToolPrivate *priv, gchar **values, GError **error)
 	/* set target size */
 	if (argc > 6) {
 		DfuImage *image;
+		DfuElement *element;
 		tmp = g_ascii_strtoull (values[6], NULL, 16);
 		if (tmp == 0 || tmp > 0xffff) {
 			g_set_error (error,
@@ -360,7 +361,8 @@ dfu_tool_convert (DfuToolPrivate *priv, gchar **values, GError **error)
 
 		/* this has to exist */
 		image = dfu_firmware_get_image (firmware, 0);
-		dfu_image_set_target_size (image, tmp);
+		element = dfu_image_get_element (image, 0);
+		dfu_element_set_target_size (element, tmp);
 	}
 
 	/* print the new object */
@@ -403,13 +405,14 @@ dfu_tool_reset (DfuToolPrivate *priv, gchar **values, GError **error)
 static gboolean
 dfu_tool_upload (DfuToolPrivate *priv, gchar **values, GError **error)
 {
+	DfuElement *element;
+	DfuTargetTransferFlags flags = DFU_TARGET_TRANSFER_FLAG_NONE;
 	g_autofree gchar *str_debug = NULL;
 	g_autoptr(DfuDevice) device = NULL;
 	g_autoptr(DfuFirmware) firmware = NULL;
 	g_autoptr(DfuImage) image = NULL;
 	g_autoptr(DfuTarget) target = NULL;
 	g_autoptr(GFile) file = NULL;
-	DfuTargetTransferFlags flags = DFU_TARGET_TRANSFER_FLAG_NONE;
 
 	/* check args */
 	if (g_strv_length (values) < 1) {
@@ -441,8 +444,8 @@ dfu_tool_upload (DfuToolPrivate *priv, gchar **values, GError **error)
 	}
 
 	/* transfer */
-	image = dfu_target_upload (target, 0, flags,
-				   NULL, NULL, NULL, error);
+	image = dfu_target_upload (target, DFU_TARGET_TRANSFER_FLAG_NONE,
+				   flags, NULL, NULL, NULL, error);
 	if (image == NULL)
 		return FALSE;
 
@@ -463,8 +466,9 @@ dfu_tool_upload (DfuToolPrivate *priv, gchar **values, GError **error)
 	g_debug ("DFU: %s", str_debug);
 
 	/* success */
+	element = dfu_image_get_element (image, 0);
 	g_print ("%li bytes successfully uploaded from device\n",
-		 g_bytes_get_size (dfu_image_get_contents (image)));
+		 g_bytes_get_size (dfu_element_get_contents (element)));
 
 	return TRUE;
 }
@@ -560,6 +564,7 @@ dfu_tool_dump (DfuToolPrivate *priv, gchar **values, GError **error)
 static gboolean
 dfu_tool_download (DfuToolPrivate *priv, gchar **values, GError **error)
 {
+	DfuElement *element;
 	DfuImage *image;
 	DfuTargetTransferFlags flags = DFU_TARGET_TRANSFER_FLAG_VERIFY;
 	DfuToolProgressHelper helper;
@@ -662,8 +667,9 @@ dfu_tool_download (DfuToolPrivate *priv, gchar **values, GError **error)
 		return FALSE;
 
 	/* success */
+	element = dfu_image_get_element (image, 0);
 	g_print ("%li bytes successfully downloaded to device\n",
-		 g_bytes_get_size (dfu_image_get_contents (image)));
+		 g_bytes_get_size (dfu_element_get_contents (element)));
 
 	return TRUE;
 }

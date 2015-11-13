@@ -31,6 +31,7 @@
 
 #include <libdfu/dfu-common.h>
 #include <libdfu/dfu-device.h>
+#include <libdfu/dfu-element.h>
 #include <libdfu/dfu-firmware.h>
 #include <libdfu/dfu-image.h>
 #include <libdfu/dfu-target.h>

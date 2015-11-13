@@ -368,6 +368,7 @@ fu_provider_usb_verify (FuProvider *provider,
 	FuProviderUsbPrivate *priv = GET_PRIVATE (provider_usb);
 	GBytes *blob_fw;
 	GUsbDevice *dev;
+	DfuElement *element;
 	const gchar *platform_id;
 	g_autofree gchar *hash = NULL;
 	g_autoptr(DfuDevice) dfu_device = NULL;
@@ -429,7 +430,8 @@ fu_provider_usb_verify (FuProvider *provider,
 		return FALSE;
 
 	/* get the SHA1 hash */
-	blob_fw = dfu_image_get_contents (dfu_image);
+	element = dfu_image_get_element (dfu_image, 0);
+	blob_fw = dfu_element_get_contents (element);
 	hash = g_compute_checksum_for_bytes (G_CHECKSUM_SHA1, blob_fw);
 	fu_device_set_metadata (device, FU_DEVICE_KEY_FIRMWARE_HASH, hash);
 	return TRUE;

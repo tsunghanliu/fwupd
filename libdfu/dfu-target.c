@@ -858,6 +858,7 @@ dfu_target_upload (DfuTarget *target,
 	gsize total_size = 0;
 	guint8 *buffer;
 	guint i;
+	g_autoptr(DfuElement) element = NULL;
 	g_autoptr(GBytes) contents = NULL;
 	g_autoptr(GPtrArray) chunks = NULL;
 
@@ -942,7 +943,9 @@ dfu_target_upload (DfuTarget *target,
 	image = dfu_image_new ();
 	dfu_image_set_name (image, priv->iface_alt_setting_name);
 	dfu_image_set_alt_setting (image, priv->iface_alt_setting);
-	dfu_image_set_contents (image, contents);
+	element = dfu_element_new ();
+	dfu_element_set_contents (element, contents);
+	dfu_image_add_element (image, element);
 	return image;
 }
 
@@ -1025,6 +1028,7 @@ dfu_target_download_bytes (DfuTarget *target, GBytes *bytes,
 			   GError **error)
 {
 	DfuTargetPrivate *priv = GET_PRIVATE (target);
+	DfuElement *element;
 	guint i;
 	guint nr_chunks;
 	g_autoptr(GError) error_local = NULL;
@@ -1102,7 +1106,8 @@ dfu_target_download_bytes (DfuTarget *target, GBytes *bytes,
 					       error);
 		if (image_tmp == NULL)
 			return FALSE;
-		bytes_tmp = dfu_image_get_contents (image_tmp);
+		element = dfu_image_get_element (image_tmp, 0);
+		bytes_tmp = dfu_element_get_contents (element);
 		if (g_bytes_compare (bytes_tmp, bytes) != 0) {
 			g_autofree gchar *bytes_cmp_str = NULL;
 			bytes_cmp_str = _g_bytes_compare_verbose (bytes_tmp, bytes);
@@ -1158,20 +1163,22 @@ dfu_target_download (DfuTarget *target, DfuImage *image,
 		     GError **error)
 {
 	GBytes *contents;
+	DfuElement *element;
 
 	g_return_val_if_fail (DFU_IS_TARGET (target), FALSE);
 	g_return_val_if_fail (DFU_IS_IMAGE (image), FALSE);
 	g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
 	/* get data */
-	contents = dfu_image_get_contents (image);
-	if (contents == NULL) {
+	element = dfu_image_get_element (image, 0);
+	if (element == NULL) {
 		g_set_error_literal (error,
 				     FWUPD_ERROR,
 				     FWUPD_ERROR_WRITE,
-				     "no image contents");
+				     "no image elements");
 		return FALSE;
 	}
+	contents = dfu_element_get_contents (element);
 	return dfu_target_download_bytes (target, contents, flags, cancellable,
 					  progress_cb, progress_cb_data, error);
 }

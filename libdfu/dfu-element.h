@@ -19,42 +19,36 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
-#ifndef __DFU_IMAGE_H
-#define __DFU_IMAGE_H
+#ifndef __DFU_ELEMENT_H
+#define __DFU_ELEMENT_H
 
 #include <glib-object.h>
 #include <gio/gio.h>
 
-#include "dfu-element.h"
-
 G_BEGIN_DECLS
 
-#define DFU_TYPE_IMAGE (dfu_image_get_type ())
-G_DECLARE_DERIVABLE_TYPE (DfuImage, dfu_image, DFU, IMAGE, GObject)
+#define DFU_TYPE_ELEMENT (dfu_element_get_type ())
+G_DECLARE_DERIVABLE_TYPE (DfuElement, dfu_element, DFU, ELEMENT, GObject)
 
-struct _DfuImageClass
+struct _DfuElementClass
 {
 	GObjectClass		 parent_class;
 };
 
-DfuImage	*dfu_image_new		(void);
+DfuElement	*dfu_element_new		(void);
 
-GPtrArray	*dfu_image_get_elements		(DfuImage	*image);
-DfuElement	*dfu_image_get_element		(DfuImage	*image,
-						 guint8		 idx);
-guint8		 dfu_image_get_alt_setting	(DfuImage	*image);
-const gchar	*dfu_image_get_name		(DfuImage	*image);
+GBytes		*dfu_element_get_contents	(DfuElement	*element);
+guint8		 dfu_element_get_address	(DfuElement	*element);
 
-void		 dfu_image_add_element		(DfuImage	*image,
-						 DfuElement	*element);
+void		 dfu_element_set_contents	(DfuElement	*element,
+						 GBytes		*contents);
+void		 dfu_element_set_address	(DfuElement	*element,
+						 guint8		 address);
+void		 dfu_element_set_target_size	(DfuElement	*element,
+						 guint32	 target_size);
 
-void		 dfu_image_set_alt_setting	(DfuImage	*image,
-						 guint8		 alt_setting);
-void		 dfu_image_set_name		(DfuImage	*image,
-						 const gchar	*name);
-
-gchar		*dfu_image_to_string		(DfuImage	*image);
+gchar		*dfu_element_to_string		(DfuElement	*element);
 
 G_END_DECLS
 
-#endif /* __DFU_IMAGE_H */
+#endif /* __DFU_ELEMENT_H */
