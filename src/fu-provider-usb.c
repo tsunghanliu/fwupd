@@ -251,6 +251,8 @@ fu_provider_usb_update (FuProvider *provider,
 	const gchar *platform_id;
 	g_autoptr(DfuDevice) dfu_device = NULL;
 	g_autoptr(DfuTarget) dfu_target = NULL;
+	g_autoptr(DfuFirmware) dfu_firmware = NULL;
+	g_autoptr(DfuImage) dfu_image = NULL;
 	g_autoptr(GError) error_local = NULL;
 
 	/* get device */
@@ -293,7 +295,19 @@ fu_provider_usb_update (FuProvider *provider,
 	}
 
 	/* hit hardware */
-	if (!dfu_target_download (dfu_target, blob_fw,
+	dfu_firmware = dfu_firmware_new ();
+	if (!dfu_firmware_parse_data (dfu_firmware, blob_fw,
+				      DFU_FIRMWARE_PARSE_FLAG_NONE, error))
+		return FALSE;
+	dfu_image = dfu_firmware_get_image (dfu_firmware, 0);
+	if (dfu_image == NULL) {
+		g_set_error (error,
+			     FWUPD_ERROR,
+			     FWUPD_ERROR_INTERNAL,
+			     "no DFU image in file");
+		return FALSE;
+	}
+	if (!dfu_target_download (dfu_target, dfu_image,
 				  DFU_TARGET_TRANSFER_FLAG_VERIFY |
 				  DFU_TARGET_TRANSFER_FLAG_BOOT_RUNTIME,
 				  NULL,
@@ -352,12 +366,13 @@ fu_provider_usb_verify (FuProvider *provider,
 {
 	FuProviderUsb *provider_usb = FU_PROVIDER_USB (provider);
 	FuProviderUsbPrivate *priv = GET_PRIVATE (provider_usb);
+	GBytes *blob_fw;
 	GUsbDevice *dev;
 	const gchar *platform_id;
 	g_autofree gchar *hash = NULL;
 	g_autoptr(DfuDevice) dfu_device = NULL;
+	g_autoptr(DfuImage) dfu_image = NULL;
 	g_autoptr(DfuTarget) dfu_target = NULL;
-	g_autoptr(GBytes) blob_fw = NULL;
 	g_autoptr(GError) error_local = NULL;
 
 	/* get device */
@@ -400,13 +415,13 @@ fu_provider_usb_verify (FuProvider *provider,
 	}
 
 	/* get data from hardware */
-	blob_fw = dfu_target_upload (dfu_target,
-				     0,
-				     DFU_TARGET_TRANSFER_FLAG_BOOT_RUNTIME,
-				     NULL,
-				     fu_provider_usb_progress_cb, provider,
-				     error);
-	if (blob_fw == NULL)
+	dfu_image = dfu_target_upload (dfu_target,
+				       0,
+				       DFU_TARGET_TRANSFER_FLAG_BOOT_RUNTIME,
+				       NULL,
+				       fu_provider_usb_progress_cb, provider,
+				       error);
+	if (dfu_image == NULL)
 		return FALSE;
 
 	/* teardown */
@@ -414,6 +429,7 @@ fu_provider_usb_verify (FuProvider *provider,
 		return FALSE;
 
 	/* get the SHA1 hash */
+	blob_fw = dfu_image_get_contents (dfu_image);
 	hash = g_compute_checksum_for_bytes (G_CHECKSUM_SHA1, blob_fw);
 	fu_device_set_metadata (device, FU_DEVICE_KEY_FIRMWARE_HASH, hash);
 	return TRUE;

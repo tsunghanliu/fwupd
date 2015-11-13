@@ -33,7 +33,7 @@
 #include <stdio.h>
 
 #include "dfu-common.h"
-#include "dfu-image.h"
+#include "dfu-image-private.h"
 
 static void dfu_image_finalize			 (GObject *object);
 
@@ -44,9 +44,10 @@ static void dfu_image_finalize			 (GObject *object);
  **/
 typedef struct {
 	GBytes			*contents;
-	gchar			*name;
+	gchar			 name[255];
 	guint32			 target_size;
 	guint8			 alt_setting;
+	guint32			 elements_do_something_with_this;
 } DfuImagePrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE (DfuImage, dfu_image, G_TYPE_OBJECT)
@@ -68,6 +69,8 @@ dfu_image_class_init (DfuImageClass *klass)
 static void
 dfu_image_init (DfuImage *image)
 {
+	DfuImagePrivate *priv = GET_PRIVATE (image);
+	memset (priv->name, 0x00, 255);
 }
 
 /**
@@ -79,7 +82,6 @@ dfu_image_finalize (GObject *object)
 	DfuImage *image = DFU_IMAGE (object);
 	DfuImagePrivate *priv = GET_PRIVATE (image);
 
-	g_free (priv->name);
 	if (priv->contents != NULL)
 		g_bytes_unref (priv->contents);
 
@@ -226,10 +228,13 @@ dfu_image_set_alt_setting (DfuImage *image, guint8 alt_setting)
 void
 dfu_image_set_name (DfuImage *image, const gchar *name)
 {
+	guint16 sz;
 	DfuImagePrivate *priv = GET_PRIVATE (image);
 	g_return_if_fail (DFU_IS_IMAGE (image));
-	g_free (priv->name);
-	priv->name = g_strdup (name);
+
+	/* this is a hard limit in DfuSe */
+	sz = MAX (strlen (name), 254);
+	memcpy (priv->name, name, sz);
 }
 
 /**
@@ -247,19 +252,18 @@ dfu_image_to_string (DfuImage *image)
 {
 	DfuImagePrivate *priv = GET_PRIVATE (image);
 	GString *str;
-	gsize length;
-	const guint8 *data;
 
 	g_return_val_if_fail (DFU_IS_IMAGE (image), NULL);
 
 	str = g_string_new ("");
 	g_string_append_printf (str, "alt_setting: 0x%02x\n", priv->alt_setting);
-	g_string_append_printf (str, "name:        %s\n", priv->name);
+	if (priv->name[0] != '\0')
+		g_string_append_printf (str, "name:        %s\n", priv->name);
 	if (priv->target_size > 0)
 		g_string_append_printf (str, "target:      0x%04x\n", priv->target_size);
 	if (priv->contents != NULL) {
-		data = g_bytes_get_data (priv->contents, &length);
-		g_string_append_printf (str, "contents:    0x%04x\n", (guint32) length);
+		g_string_append_printf (str, "contents:    0x%04x\n",
+					(guint32) g_bytes_get_size (priv->contents));
 	}
 
 	g_string_truncate (str, str->len - 1);
@@ -282,4 +286,95 @@ dfu_image_set_target_size (DfuImage *image, guint32 target_size)
 	DfuImagePrivate *priv = GET_PRIVATE (image);
 	g_return_if_fail (DFU_IS_IMAGE (image));
 	priv->target_size = target_size;
+}
+
+/* DfuSe image header */
+typedef struct __attribute__((packed)) {
+	guint8		 sig[6];
+	guint8		 alternate_setting;
+	guint32		 target_named;
+	gchar		 target_name[255];
+	guint32		 target_size;
+	guint32		 elements;
+} DfuSeImagePrefix;
+
+/* DfuSe element header */
+typedef struct __attribute__((packed)) {
+	guint32		 address;
+	guint32		 size;
+} DfuSeElementPrefix;
+
+/**
+ * dfu_image_from_dfuse:
+ **/
+DfuImage *
+dfu_image_from_dfuse (const guint8 *data, gsize length, GError **error)
+{
+	DfuImagePrivate *priv;
+	DfuImage *image = NULL;
+	DfuSeImagePrefix *im;
+	guint32 offset = sizeof(DfuSeImagePrefix);
+	guint j;
+	g_autoptr(GBytes) contents = NULL;
+
+	g_assert_cmpint(sizeof(DfuSeImagePrefix), ==, 274);
+	g_assert_cmpint(sizeof(DfuSeElementPrefix), ==, 8);
+
+	/* verify image signature */
+	im = (DfuSeImagePrefix *) data;
+	if (memcmp (im->sig, "Target", 6) != 0) {
+		g_set_error_literal (error,
+				     FWUPD_ERROR,
+				     FWUPD_ERROR_INTERNAL,
+				     "invalid DfuSe target signature");
+		return NULL;
+	}
+
+	/* create new image */
+	image = dfu_image_new ();
+	priv = GET_PRIVATE (image);
+	priv->alt_setting = im->alternate_setting;
+	if (im->target_named == 0x01)
+		memcpy (priv->name, im->target_name, 256);
+	priv->elements_do_something_with_this = im->elements;
+	contents = g_bytes_new (data + offset,
+				GUINT32_FROM_LE (im->target_size));
+	dfu_image_set_contents (image, contents);
+
+	/* TODO: parse elements */
+	for (j = 0; j < im->elements; j++) {
+		DfuSeElementPrefix *element = NULL;
+		element = (DfuSeElementPrefix *) (data + offset);
+		g_debug ("element address 0x%04x", GUINT32_FROM_LE (element->address));
+		g_debug ("element size 0x%04x", GUINT32_FROM_LE (element->size));
+		offset += element->size + sizeof(DfuSeElementPrefix);
+	}
+	return image;
+}
+
+/**
+ * dfu_image_to_dfuse:
+ **/
+GBytes *
+dfu_image_to_dfuse (DfuImage *image)
+{
+	DfuImagePrivate *priv = GET_PRIVATE (image);
+	DfuSeImagePrefix *im;
+	const guint8 *data;
+	gsize length;
+	guint8 *buf;
+
+	data = g_bytes_get_data (priv->contents, &length);
+	buf = g_malloc0 (length + sizeof (DfuSeImagePrefix));
+	im = (DfuSeImagePrefix *) buf;
+	memcpy (im->sig, "Target", 6);
+	im->alternate_setting = priv->alt_setting;
+	if (priv->name != NULL) {
+		im->target_named = 0x01;
+		memcpy (im->target_name, priv->name, 255);
+	}
+	im->target_size = length;
+	im->elements = priv->elements_do_something_with_this;
+	memcpy (buf + sizeof (DfuSeImagePrefix), data, length);
+	return g_bytes_new_take (buf, length + sizeof (DfuSeImagePrefix));
 }

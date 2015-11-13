@@ -46,6 +46,37 @@ dfu_test_get_filename (const gchar *filename)
 	return g_strdup (full_tmp);
 }
 
+/**
+ * _g_bytes_compare_verbose:
+ **/
+static gchar *
+_g_bytes_compare_verbose (GBytes *bytes1, GBytes *bytes2)
+{
+	const guint8 *data1;
+	const guint8 *data2;
+	gsize length1;
+	gsize length2;
+	guint i;
+
+	data1 = g_bytes_get_data (bytes1, &length1);
+	data2 = g_bytes_get_data (bytes2, &length2);
+
+	/* not the same length */
+	if (length1 != length2) {
+		return g_strdup_printf ("got %li bytes, expected %li",
+					length1, length2);
+	}
+
+	/* return 00 01 02 03 */
+	for (i = 0; i < length1; i++) {
+		if (data1[i] != data2[i]) {
+			return g_strdup_printf ("got 0x%02x, expected 0x%02x @ 0x%04x",
+						data1[i], data2[i], i);
+		}
+	}
+	return NULL;
+}
+
 static void
 dfu_enums_func (void)
 {
@@ -56,23 +87,29 @@ dfu_enums_func (void)
 		g_assert_cmpstr (dfu_status_to_string (i), !=, NULL);
 }
 
+static GBytes *
+dfu_self_test_get_bytes_for_file (GFile *file, GError **error)
+{
+	gchar *contents = NULL;
+	gsize length = 0;
+	if (!g_file_load_contents (file, NULL, &contents, &length, NULL, error))
+		return NULL;
+	return g_bytes_new_take (contents, length);
+}
+
 static void
-dfu_firmware_func (void)
+dfu_firmware_raw_func (void)
 {
 	DfuImage *image_tmp;
 	gchar buf[256];
 	guint i;
 	gboolean ret;
-	g_autofree gchar *filename1 = NULL;
-	g_autofree gchar *filename2 = NULL;
 	g_autoptr(DfuFirmware) firmware = NULL;
-	g_autoptr(DfuImage) image = NULL;
-	g_autoptr(GBytes) data = NULL;
 	g_autoptr(GBytes) fw = NULL;
 	g_autoptr(GBytes) no_suffix_contents = NULL;
+	g_autoptr(GBytes) roundtrip_orig = NULL;
+	g_autoptr(GBytes) roundtrip = NULL;
 	g_autoptr(GError) error = NULL;
-	g_autoptr(GFile) file1 = NULL;
-	g_autoptr(GFile) file2 = NULL;
 
 	firmware = dfu_firmware_new ();
 
@@ -88,6 +125,7 @@ dfu_firmware_func (void)
 	g_assert_cmpint (dfu_firmware_get_vid (firmware), ==, 0xffff);
 	g_assert_cmpint (dfu_firmware_get_pid (firmware), ==, 0xffff);
 	g_assert_cmpint (dfu_firmware_get_release (firmware), ==, 0xffff);
+	g_assert_cmpint (dfu_firmware_get_format (firmware), ==, DFU_FIRMWARE_FORMAT_RAW);
 	image_tmp = dfu_firmware_get_image (firmware, 0xfe);
 	g_assert (image_tmp == NULL);
 	image_tmp = dfu_firmware_get_image (firmware, 0);
@@ -95,8 +133,39 @@ dfu_firmware_func (void)
 	no_suffix_contents = dfu_image_get_contents (image_tmp);
 	g_assert_cmpint (g_bytes_compare (no_suffix_contents, fw), ==, 0);
 
+	/* can we roundtrip without adding data */
+	roundtrip = dfu_firmware_write_data (firmware, &error);
+	g_assert_no_error (error);
+	g_assert (roundtrip != NULL);
+	g_assert_cmpstr (_g_bytes_compare_verbose (roundtrip, fw), ==, NULL);
+}
+
+static void
+dfu_firmware_dfu_func (void)
+{
+	gchar buf[256];
+	guint i;
+	gboolean ret;
+	g_autofree gchar *filename = NULL;
+	g_autoptr(DfuFirmware) firmware = NULL;
+	g_autoptr(DfuImage) image = NULL;
+	g_autoptr(GBytes) data = NULL;
+	g_autoptr(GBytes) fw = NULL;
+	g_autoptr(GBytes) roundtrip_orig = NULL;
+	g_autoptr(GBytes) roundtrip = NULL;
+	g_autoptr(GError) error = NULL;
+	g_autoptr(GFile) file = NULL;
+
+	firmware = dfu_firmware_new ();
+
+	/* set up some dummy data */
+	for (i = 0; i < 256; i++)
+		buf[i] = i;
+	fw = g_bytes_new_static (buf, 256);
+
 	/* write DFU format */
 	firmware = dfu_firmware_new ();
+	dfu_firmware_set_format (firmware, DFU_FIRMWARE_FORMAT_DFU_1_0);
 	dfu_firmware_set_vid (firmware, 0x1234);
 	dfu_firmware_set_pid (firmware, 0x5678);
 	dfu_firmware_set_release (firmware, 0xfedc);
@@ -108,6 +177,7 @@ dfu_firmware_func (void)
 	g_assert (data != NULL);
 
 	/* can we load it again? */
+	g_ptr_array_set_size (dfu_firmware_get_images (firmware), 0);
 	ret = dfu_firmware_parse_data (firmware, data, DFU_FIRMWARE_PARSE_FLAG_NONE, &error);
 	g_assert_no_error (error);
 	g_assert (ret);
@@ -117,10 +187,11 @@ dfu_firmware_func (void)
 	g_assert_cmpint (dfu_firmware_get_format (firmware), ==, DFU_FIRMWARE_FORMAT_DFU_1_0);
 
 	/* load a real firmware */
-	filename1 = dfu_test_get_filename ("kiibohd.dfu.bin");
-	g_assert (filename1 != NULL);
-	file1 = g_file_new_for_path (filename1);
-	ret = dfu_firmware_parse_file (firmware, file1,
+	filename = dfu_test_get_filename ("kiibohd.dfu.bin");
+	g_assert (filename != NULL);
+	file = g_file_new_for_path (filename);
+	g_ptr_array_set_size (dfu_firmware_get_images (firmware), 0);
+	ret = dfu_firmware_parse_file (firmware, file,
 				       DFU_FIRMWARE_PARSE_FLAG_NONE,
 				       NULL, &error);
 	g_assert_no_error (error);
@@ -130,11 +201,33 @@ dfu_firmware_func (void)
 	g_assert_cmpint (dfu_firmware_get_release (firmware), ==, 0xffff);
 	g_assert_cmpint (dfu_firmware_get_format (firmware), ==, DFU_FIRMWARE_FORMAT_DFU_1_0);
 
+	/* can we roundtrip without loosing data */
+	roundtrip_orig = dfu_self_test_get_bytes_for_file (file, &error);
+	g_assert_no_error (error);
+	g_assert (roundtrip_orig != NULL);
+	roundtrip = dfu_firmware_write_data (firmware, &error);
+	g_assert_no_error (error);
+	g_assert (roundtrip != NULL);
+	g_assert_cmpstr (_g_bytes_compare_verbose (roundtrip, roundtrip_orig), ==, NULL);
+}
+
+static void
+dfu_firmware_dfuse_func (void)
+{
+	gboolean ret;
+	g_autofree gchar *filename = NULL;
+	g_autoptr(DfuFirmware) firmware = NULL;
+	g_autoptr(GBytes) roundtrip_orig = NULL;
+	g_autoptr(GBytes) roundtrip = NULL;
+	g_autoptr(GError) error = NULL;
+	g_autoptr(GFile) file = NULL;
+
 	/* load a DeFUse firmware */
-	filename2 = dfu_test_get_filename ("dev_VRBRAIN.dfu");
-	g_assert (filename2 != NULL);
-	file2 = g_file_new_for_path (filename2);
-	ret = dfu_firmware_parse_file (firmware, file2,
+	filename = dfu_test_get_filename ("dev_VRBRAIN.dfu");
+	g_assert (filename != NULL);
+	file = g_file_new_for_path (filename);
+	firmware = dfu_firmware_new ();
+	ret = dfu_firmware_parse_file (firmware, file,
 				       DFU_FIRMWARE_PARSE_FLAG_NONE,
 				       NULL, &error);
 	g_assert_no_error (error);
@@ -143,6 +236,15 @@ dfu_firmware_func (void)
 	g_assert_cmpint (dfu_firmware_get_pid (firmware), ==, 0x0000);
 	g_assert_cmpint (dfu_firmware_get_release (firmware), ==, 0x0000);
 	g_assert_cmpint (dfu_firmware_get_format (firmware), ==, DFU_FIRMWARE_FORMAT_DFUSE);
+
+	/* can we roundtrip without loosing data */
+	roundtrip_orig = dfu_self_test_get_bytes_for_file (file, &error);
+	g_assert_no_error (error);
+	g_assert (roundtrip_orig != NULL);
+	roundtrip = dfu_firmware_write_data (firmware, &error);
+	g_assert_no_error (error);
+	g_assert (roundtrip != NULL);
+	g_assert_cmpstr (_g_bytes_compare_verbose (roundtrip, roundtrip_orig), ==, NULL);
 }
 
 static void
@@ -206,7 +308,7 @@ dfu_colorhug_plus_func (void)
 	gboolean ret;
 	g_autoptr(DfuDevice) device = NULL;
 	g_autoptr(DfuTarget) target = NULL;
-	g_autoptr(GBytes) chunk = NULL;
+	g_autoptr(DfuImage) image = NULL;
 	g_autoptr(GError) error = NULL;
 	g_autoptr(GUsbContext) usb_ctx = NULL;
 	g_autoptr(GUsbDevice) usb_device = NULL;
@@ -274,13 +376,13 @@ dfu_colorhug_plus_func (void)
 	g_assert_cmpstr (dfu_state_to_string (dfu_target_get_state (target)), ==, "dfuIDLE");
 
 	/* get a dump of the existing firmware */
-	chunk = dfu_target_upload (target, 0, DFU_TARGET_TRANSFER_FLAG_NONE,
+	image = dfu_target_upload (target, 0, DFU_TARGET_TRANSFER_FLAG_NONE,
 				   NULL, NULL, NULL, &error);
 	g_assert_no_error (error);
-	g_assert (chunk != NULL);
+	g_assert (DFU_IS_IMAGE (image));
 
 	/* download a new firmware */
-	ret = dfu_target_download (target, chunk,
+	ret = dfu_target_download (target, image,
 				   DFU_TARGET_TRANSFER_FLAG_VERIFY |
 				   DFU_TARGET_TRANSFER_FLAG_HOST_RESET,
 				   NULL,
@@ -319,7 +421,9 @@ main (int argc, char **argv)
 
 	/* tests go here */
 	g_test_add_func ("/libdfu/enums", dfu_enums_func);
-	g_test_add_func ("/libdfu/firmware", dfu_firmware_func);
+	g_test_add_func ("/libdfu/firmware{raw}", dfu_firmware_raw_func);
+	g_test_add_func ("/libdfu/firmware{dfu}", dfu_firmware_dfu_func);
+	g_test_add_func ("/libdfu/firmware{dfuse}", dfu_firmware_dfuse_func);
 	g_test_add_func ("/libdfu/device", dfu_device_func);
 	g_test_add_func ("/libdfu/colorhug+", dfu_colorhug_plus_func);
 	return g_test_run ();

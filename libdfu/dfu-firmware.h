@@ -56,6 +56,7 @@ typedef enum {
 /**
  * DfuFirmwareFormat:
  * @DFU_FIRMWARE_FORMAT_UNKNOWN:			Version number unknown
+ * @DFU_FIRMWARE_FORMAT_RAW:				Version number unknown
  * @DFU_FIRMWARE_FORMAT_DFU_1_0:			DFU 1.0
  * @DFU_FIRMWARE_FORMAT_DFUSE:				DfuSe extension detected
  *
@@ -63,6 +64,7 @@ typedef enum {
  **/
 typedef enum {
 	DFU_FIRMWARE_FORMAT_UNKNOWN			= 0,
+	DFU_FIRMWARE_FORMAT_RAW				= 0x0001,
 	DFU_FIRMWARE_FORMAT_DFU_1_0			= 0x0100,
 	DFU_FIRMWARE_FORMAT_DFUSE			= 0x011a,
 	/* private */

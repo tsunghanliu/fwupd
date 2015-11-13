@@ -1017,11 +1017,11 @@ dfu_target_upload_chunk (DfuTarget *target, guint8 index,
  *
  * Uploads firmware from the target to the host.
  *
- * Return value: (transfer container): the uploaded data, or %NULL
+ * Return value: (transfer full): the uploaded image, or %NULL for error
  *
  * Since: 0.5.4
  **/
-GBytes *
+DfuImage *
 dfu_target_upload (DfuTarget *target,
 		   gsize expected_size,
 		   DfuTargetTransferFlags flags,
@@ -1031,12 +1031,14 @@ dfu_target_upload (DfuTarget *target,
 		   GError **error)
 {
 	DfuTargetPrivate *priv = GET_PRIVATE (target);
+	DfuImage *image = NULL;
 	GBytes *chunk_tmp;
 	gsize chunk_size;
 	gsize offset = 0;
 	gsize total_size = 0;
 	guint8 *buffer;
 	guint i;
+	g_autoptr(GBytes) contents = NULL;
 	g_autoptr(GPtrArray) chunks = NULL;
 
 	g_return_val_if_fail (DFU_IS_TARGET (target), NULL);
@@ -1114,9 +1116,15 @@ dfu_target_upload (DfuTarget *target,
 		memcpy (buffer + offset, chunk_data, chunk_size);
 		offset += chunk_size;
 	}
-	return g_bytes_new_take (buffer, total_size);
-}
 
+	/* create new image */
+	contents = g_bytes_new_take (buffer, total_size);
+	image = dfu_image_new ();
+	dfu_image_set_name (image, priv->iface_alt_setting_name);
+	dfu_image_set_alt_setting (image, priv->iface_alt_setting);
+	dfu_image_set_contents (image, contents);
+	return image;
+}
 
 /**
  * dfu_target_download_chunk:
@@ -1186,37 +1194,20 @@ _g_bytes_compare_verbose (GBytes *bytes1, GBytes *bytes2)
 }
 
 /**
- * dfu_target_download:
- * @target: a #DfuTarget
- * @flags: flags to use, e.g. %DFU_TARGET_TRANSFER_FLAG_VERIFY
- * @cancellable: a #GCancellable, or %NULL
- * @progress_cb: a #GFileProgressCallback, or %NULL
- * @progress_cb_data: user data to pass to @progress_cb
- * @error: a #GError, or %NULL
- *
- * Downloads firmware from the host to the target, optionally verifying
- * the transfer.
- *
- * Return value: %TRUE for success
- *
- * Since: 0.5.4
+ * dfu_target_download_bytes:
  **/
-gboolean
-dfu_target_download (DfuTarget *target, GBytes *bytes,
-		     DfuTargetTransferFlags flags,
-		     GCancellable *cancellable,
-		     DfuProgressCallback progress_cb,
-		     gpointer progress_cb_data,
-		     GError **error)
+static gboolean
+dfu_target_download_bytes (DfuTarget *target, GBytes *bytes,
+			   DfuTargetTransferFlags flags,
+			   GCancellable *cancellable,
+			   DfuProgressCallback progress_cb,
+			   gpointer progress_cb_data,
+			   GError **error)
 {
 	DfuTargetPrivate *priv = GET_PRIVATE (target);
 	guint i;
 	guint nr_chunks;
 	g_autoptr(GError) error_local = NULL;
-
-	g_return_val_if_fail (DFU_IS_TARGET (target), FALSE);
-	g_return_val_if_fail (bytes != NULL, FALSE);
-	g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
 	/* can the target do this? */
 	if (!dfu_target_can_download (target)) {
@@ -1280,16 +1271,18 @@ dfu_target_download (DfuTarget *target, GBytes *bytes,
 
 	/* verify */
 	if (flags & DFU_TARGET_TRANSFER_FLAG_VERIFY) {
-		g_autoptr(GBytes) bytes_tmp = NULL;
-		bytes_tmp = dfu_target_upload (target,
+		GBytes *bytes_tmp;
+		g_autoptr(DfuImage) image_tmp = NULL;
+		image_tmp = dfu_target_upload (target,
 					       g_bytes_get_size (bytes),
 					       DFU_TARGET_TRANSFER_FLAG_NONE,
 					       cancellable,
 					       progress_cb,
 					       progress_cb_data,
 					       error);
-		if (bytes_tmp == NULL)
+		if (image_tmp == NULL)
 			return FALSE;
+		bytes_tmp = dfu_image_get_contents (image_tmp);
 		if (g_bytes_compare (bytes_tmp, bytes) != 0) {
 			g_autofree gchar *bytes_cmp_str = NULL;
 			bytes_cmp_str = _g_bytes_compare_verbose (bytes_tmp, bytes);
@@ -1317,6 +1310,50 @@ dfu_target_download (DfuTarget *target, GBytes *bytes,
 	}
 
 	return TRUE;
+}
+
+/**
+ * dfu_target_download:
+ * @target: a #DfuTarget
+ * @image: a #DfuImage
+ * @flags: flags to use, e.g. %DFU_TARGET_TRANSFER_FLAG_VERIFY
+ * @cancellable: a #GCancellable, or %NULL
+ * @progress_cb: a #GFileProgressCallback, or %NULL
+ * @progress_cb_data: user data to pass to @progress_cb
+ * @error: a #GError, or %NULL
+ *
+ * Downloads firmware from the host to the target, optionally verifying
+ * the transfer.
+ *
+ * Return value: %TRUE for success
+ *
+ * Since: 0.5.4
+ **/
+gboolean
+dfu_target_download (DfuTarget *target, DfuImage *image,
+		     DfuTargetTransferFlags flags,
+		     GCancellable *cancellable,
+		     DfuProgressCallback progress_cb,
+		     gpointer progress_cb_data,
+		     GError **error)
+{
+	GBytes *contents;
+
+	g_return_val_if_fail (DFU_IS_TARGET (target), FALSE);
+	g_return_val_if_fail (DFU_IS_IMAGE (image), FALSE);
+	g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+	/* get data */
+	contents = dfu_image_get_contents (image);
+	if (contents == NULL) {
+		g_set_error_literal (error,
+				     FWUPD_ERROR,
+				     FWUPD_ERROR_WRITE,
+				     "no image contents");
+		return FALSE;
+	}
+	return dfu_target_download_bytes (target, contents, flags, cancellable,
+					  progress_cb, progress_cb_data, error);
 }
 
 /**

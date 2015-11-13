@@ -26,6 +26,8 @@
 #include <gio/gio.h>
 #include <gusb.h>
 
+#include "dfu-image.h"
+
 G_BEGIN_DECLS
 
 #define DFU_TYPE_TARGET (dfu_target_get_type ())
@@ -96,7 +98,7 @@ gboolean	 dfu_target_abort			(DfuTarget	*target,
 gboolean	 dfu_target_clear_status		(DfuTarget	*target,
 							 GCancellable	*cancellable,
 							 GError		**error);
-GBytes		*dfu_target_upload			(DfuTarget	*target,
+DfuImage	*dfu_target_upload			(DfuTarget	*target,
 							 gsize		 expected_size,
 							 DfuTargetTransferFlags flags,
 							 GCancellable	*cancellable,
@@ -104,7 +106,7 @@ GBytes		*dfu_target_upload			(DfuTarget	*target,
 							 gpointer	 progress_cb_data,
 							 GError		**error);
 gboolean	 dfu_target_download			(DfuTarget	*target,
-							 GBytes		*bytes,
+							 DfuImage	*image,
 							 DfuTargetTransferFlags flags,
 							 GCancellable	*cancellable,
 							 DfuProgressCallback progress_cb,
