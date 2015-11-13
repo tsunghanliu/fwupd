@@ -27,6 +27,7 @@
 #include <gusb.h>
 
 #include "dfu-target.h"
+#include "dfu-firmware.h"
 
 G_BEGIN_DECLS
 
@@ -56,6 +57,13 @@ gboolean	 dfu_device_reset			(DfuDevice	*device,
 							 GError		**error);
 gboolean	 dfu_device_wait_for_replug		(DfuDevice	*device,
 							 guint		 timeout,
+							 GCancellable	*cancellable,
+							 GError		**error);
+DfuFirmware	*dfu_device_upload			(DfuDevice	*device,
+							 GCancellable	*cancellable,
+							 GError		**error);
+gboolean	 dfu_device_download			(DfuDevice	*device,
+							 DfuFirmware	*firmware,
 							 GCancellable	*cancellable,
 							 GError		**error);
 

@@ -536,3 +536,57 @@ dfu_device_reset (DfuDevice *device, GError **error)
 	}
 	return TRUE;
 }
+
+DfuFirmware *
+dfu_device_upload (DfuDevice *device, GCancellable *cancellable, GError **error)
+{
+	DfuDevicePrivate *priv = GET_PRIVATE (device);
+	DfuTarget *target;
+	guint i;
+	g_autoptr(DfuFirmware) firmware = NULL;
+	g_autoptr(GPtrArray) targets = NULL;
+
+	firmware = dfu_firmware_new ();
+	dfu_firmware_set_vid (firmware, priv->runtime_vid);
+	dfu_firmware_set_pid (firmware, priv->runtime_pid);
+//	dfu_firmware_set_release (firmware, xxxxxxxxxxx);
+
+	/* switch from runtime to DFU mode */
+	//FIXME
+
+	/* upload from each target */
+	targets = dfu_device_get_targets (device);
+	for (i = 0; i < targets->len; i++) {
+		g_autoptr(DfuImage) image = NULL;
+		target = g_ptr_array_index (targets, i);
+		image = dfu_target_upload (target, 0,
+					   DFU_TARGET_TRANSFER_FLAG_NONE, 
+					   cancellable,
+					   NULL,
+					   NULL,
+					   error);
+		if (image == NULL)
+			return NULL;
+		dfu_firmware_add_image (firmware, image);
+	}
+
+	/* choose the most appropriate type */
+	if (targets->len > 1) {
+		g_debug ("switching to DefuSe automatically");
+		dfu_firmware_set_format (firmware, DFU_FIRMWARE_FORMAT_DFUSE);
+	} else {
+		dfu_firmware_set_format (firmware, DFU_FIRMWARE_FORMAT_DFU_1_0);
+	}
+
+	/* boot back to runtime */
+	//FIXME
+
+	/* success */
+	return g_object_ref (firmware);
+}
+
+gboolean
+dfu_device_download (DfuDevice *device, DfuFirmware *firmware, GCancellable *cancellable, GError **error)
+{
+	return TRUE;
+}
