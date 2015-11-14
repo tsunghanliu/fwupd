@@ -23,7 +23,12 @@
  * SECTION:dfu-element
  * @short_description: Object representing a binary element
  *
- * This object represents an binary blob of data in a DFU file.
+ * This object represents an binary blob of data at a specific address.
+ *
+ * This allows relocatable data segments to be stored in different
+ * locations on the device itself.
+ *
+ * See also: #DfuImage, #DfuFirmware
  */
 
 #include "config.h"

@@ -400,12 +400,11 @@ dfu_tool_reset (DfuToolPrivate *priv, gchar **values, GError **error)
 }
 
 /**
- * dfu_tool_upload:
+ * dfu_tool_upload_target:
  **/
 static gboolean
-dfu_tool_upload (DfuToolPrivate *priv, gchar **values, GError **error)
+dfu_tool_upload_target (DfuToolPrivate *priv, gchar **values, GError **error)
 {
-	DfuElement *element;
 	DfuTargetTransferFlags flags = DFU_TARGET_TRANSFER_FLAG_NONE;
 	g_autofree gchar *str_debug = NULL;
 	g_autoptr(DfuDevice) device = NULL;
@@ -466,10 +465,56 @@ dfu_tool_upload (DfuToolPrivate *priv, gchar **values, GError **error)
 	g_debug ("DFU: %s", str_debug);
 
 	/* success */
-	element = dfu_image_get_element (image, 0);
-	g_print ("%li bytes successfully uploaded from device\n",
-		 g_bytes_get_size (dfu_element_get_contents (element)));
+	g_print ("%u bytes successfully uploaded from device\n",
+		 dfu_image_get_size (image));
+	return TRUE;
+}
 
+/**
+ * dfu_tool_upload:
+ **/
+static gboolean
+dfu_tool_upload (DfuToolPrivate *priv, gchar **values, GError **error)
+{
+	DfuTargetTransferFlags flags = DFU_TARGET_TRANSFER_FLAG_NONE;
+	g_autofree gchar *str_debug = NULL;
+	g_autoptr(DfuDevice) device = NULL;
+	g_autoptr(DfuFirmware) firmware = NULL;
+	g_autoptr(DfuImage) image = NULL;
+	g_autoptr(GFile) file = NULL;
+
+	/* check args */
+	if (g_strv_length (values) < 1) {
+		g_set_error_literal (error,
+				     FWUPD_ERROR,
+				     FWUPD_ERROR_INTERNAL,
+				     "Invalid arguments, expected FILENAME");
+		return FALSE;
+	}
+
+	/* open correct device */
+	device = dfu_tool_get_defalt_device (priv, error);
+	if (device == NULL)
+		return FALSE;
+
+	/* transfer */
+	firmware = dfu_device_upload (device, DFU_TARGET_TRANSFER_FLAG_NONE,
+				      flags, NULL, NULL, NULL, error);
+	if (firmware == NULL)
+		return FALSE;
+
+	/* save file */
+	file = g_file_new_for_path (values[0]);
+	if (!dfu_firmware_write_file (firmware, file, NULL, error))
+		return FALSE;
+
+	/* print the new object */
+	str_debug = dfu_firmware_to_string (firmware);
+	g_debug ("DFU: %s", str_debug);
+
+	/* success */
+	g_print ("%u bytes successfully uploaded from device\n",
+		 dfu_firmware_get_size (firmware));
 	return TRUE;
 }
 
@@ -559,12 +604,11 @@ dfu_tool_dump (DfuToolPrivate *priv, gchar **values, GError **error)
 }
 
 /**
- * dfu_tool_download:
+ * dfu_tool_download_target:
  **/
 static gboolean
-dfu_tool_download (DfuToolPrivate *priv, gchar **values, GError **error)
+dfu_tool_download_target (DfuToolPrivate *priv, gchar **values, GError **error)
 {
-	DfuElement *element;
 	DfuImage *image;
 	DfuTargetTransferFlags flags = DFU_TARGET_TRANSFER_FLAG_VERIFY;
 	DfuToolProgressHelper helper;
@@ -667,10 +711,91 @@ dfu_tool_download (DfuToolPrivate *priv, gchar **values, GError **error)
 		return FALSE;
 
 	/* success */
-	element = dfu_image_get_element (image, 0);
-	g_print ("%li bytes successfully downloaded to device\n",
-		 g_bytes_get_size (dfu_element_get_contents (element)));
+	g_print ("%u bytes successfully downloaded to device\n",
+		 dfu_image_get_size (image));
+	return TRUE;
+}
 
+/**
+ * dfu_tool_download:
+ **/
+static gboolean
+dfu_tool_download (DfuToolPrivate *priv, gchar **values, GError **error)
+{
+	DfuTargetTransferFlags flags = DFU_TARGET_TRANSFER_FLAG_VERIFY;
+	DfuToolProgressHelper helper;
+	g_autofree gchar *str_debug = NULL;
+	g_autoptr(DfuDevice) device = NULL;
+	g_autoptr(DfuFirmware) firmware = NULL;
+	g_autoptr(GFile) file = NULL;
+
+	/* check args */
+	if (g_strv_length (values) < 1) {
+		g_set_error_literal (error,
+				     FWUPD_ERROR,
+				     FWUPD_ERROR_INTERNAL,
+				     "Invalid arguments, expected FILENAME");
+		return FALSE;
+	}
+
+	/* open file */
+	firmware = dfu_firmware_new ();
+	file = g_file_new_for_path (values[0]);
+	if (!dfu_firmware_parse_file (firmware, file,
+				      DFU_FIRMWARE_PARSE_FLAG_NONE,
+				      NULL, error))
+		return FALSE;
+
+	/* open correct device */
+	device = dfu_tool_get_defalt_device (priv, error);
+	if (device == NULL)
+		return FALSE;
+
+	/* print the new object */
+	str_debug = dfu_firmware_to_string (firmware);
+	g_debug ("DFU: %s", str_debug);
+
+	/* check vendor matches */
+	if (dfu_firmware_get_vid (firmware) != 0xffff &&
+	    dfu_device_get_runtime_pid (device) != 0xffff &&
+	    dfu_firmware_get_vid (firmware) != dfu_device_get_runtime_vid (device)) {
+		g_print ("Vendor ID incorrect, expected 0x%04x got 0x%04x\n",
+			 dfu_firmware_get_vid (firmware),
+			 dfu_device_get_runtime_vid (device));
+		return EXIT_FAILURE;
+	}
+
+	/* check product matches */
+	if (dfu_firmware_get_pid (firmware) != 0xffff &&
+	    dfu_device_get_runtime_pid (device) != 0xffff &&
+	    dfu_firmware_get_pid (firmware) != dfu_device_get_runtime_pid (device)) {
+		g_set_error (error,
+			     FWUPD_ERROR,
+			     FWUPD_ERROR_INTERNAL,
+			     "Product ID incorrect, expected 0x%04x got 0x%04x",
+			     dfu_firmware_get_pid (firmware),
+			     dfu_device_get_runtime_pid (device));
+		return FALSE;
+	}
+
+	/* optional reset */
+	if (priv->reset) {
+		flags |= DFU_TARGET_TRANSFER_FLAG_HOST_RESET;
+		flags |= DFU_TARGET_TRANSFER_FLAG_BOOT_RUNTIME;
+	}
+
+	/* transfer */
+	helper.last_state = DFU_STATE_DFU_ERROR;
+	helper.marks_total = 30;
+	helper.marks_shown = 0;
+	if (!dfu_device_download (device, firmware, flags, NULL,
+				  fu_tool_transfer_progress_cb, &helper,
+				  error))
+		return FALSE;
+
+	/* success */
+	g_print ("%u bytes successfully downloaded to device\n",
+		 dfu_firmware_get_size (firmware));
 	return TRUE;
 }
 
@@ -820,7 +945,19 @@ main (int argc, char *argv[])
 		     _("Read firmware from device into file"),
 		     dfu_tool_upload);
 	dfu_tool_add (priv->cmd_array,
+		     "upload-target",
+		     NULL,
+		     /* TRANSLATORS: command description */
+		     _("Read firmware from target into file"),
+		     dfu_tool_upload_target);
+	dfu_tool_add (priv->cmd_array,
 		     "download",
+		     NULL,
+		     /* TRANSLATORS: command description */
+		     _("Write firmware from file into target"),
+		     dfu_tool_download_target);
+	dfu_tool_add (priv->cmd_array,
+		     "download-target",
 		     NULL,
 		     /* TRANSLATORS: command description */
 		     _("Write firmware from file into device"),

@@ -21,9 +21,18 @@
 
 /**
  * SECTION:dfu-device
- * @short_description: Object representing a DFU device
+ * @short_description: Object representing a DFU-capable device
  *
- * This object allows reading and writing DFU-suffix files.
+ * This object allows two things:
+ *
+ *  - Downloading from the host to the device, optionally with
+ *    verification using a DFU or DfuSe firmware file.
+ *
+ *  - Uploading from the device to the host to a DFU or DfuSe firmware
+ *    file. The file format is chosen automatically, with DfuSe being
+ *    chosen if the device contains more than one target.
+ *
+ * See also: #DfuTarget, #DfuFirmware
  */
 
 #include "config.h"
@@ -203,6 +212,35 @@ dfu_device_get_target_by_alt_setting (DfuDevice *device, guint8 alt_setting, GEr
 		     "No target with alt-setting %i",
 		     alt_setting);
 	return NULL;
+}
+
+/**
+ * dfu_device_get_target_default:
+ * @device: a #DfuDevice
+ *
+ * Gets the default target.
+ *
+ * Return value: (transfer full): a #DfuTarget, or %NULL
+ *
+ * Since: 0.5.4
+ **/
+DfuTarget *
+dfu_device_get_target_default (DfuDevice *device, GError **error)
+{
+	DfuDevicePrivate *priv = GET_PRIVATE (device);
+
+	g_return_val_if_fail (DFU_IS_DEVICE (device), NULL);
+	g_return_val_if_fail (error == NULL || *error == NULL, NULL);
+
+	/* find first target */
+	if (priv->targets->len == 0) {
+		g_set_error_literal (error,
+				     FWUPD_ERROR,
+				     FWUPD_ERROR_INTERNAL,
+				     "No default target");
+		return NULL;
+	}
+	return g_object_ref (g_ptr_array_index (priv->targets, 0));
 }
 
 /**
@@ -537,33 +575,65 @@ dfu_device_reset (DfuDevice *device, GError **error)
 	return TRUE;
 }
 
+/**
+ * dfu_device_upload:
+ * @device: a #DfuDevice
+ * @flags: flags to use, e.g. %DFU_TARGET_TRANSFER_FLAG_VERIFY
+ * @expected_size: the expected size of the firmware, or 0 for unknown
+ * @cancellable: a #GCancellable, or %NULL
+ * @progress_cb: a #GFileProgressCallback, or %NULL
+ * @progress_cb_data: user data to pass to @progress_cb
+ * @error: a #GError, or %NULL
+ *
+ * Uploads firmware from the target to the host.
+ *
+ * Return value: (transfer full): the uploaded firmware, or %NULL for error
+ *
+ * Since: 0.5.4
+ **/
 DfuFirmware *
-dfu_device_upload (DfuDevice *device, GCancellable *cancellable, GError **error)
+dfu_device_upload (DfuDevice *device,
+		   gsize expected_size,
+		   DfuTargetTransferFlags flags,
+		   GCancellable *cancellable,
+		   DfuProgressCallback progress_cb,
+		   gpointer progress_cb_data,
+		   GError **error)
 {
 	DfuDevicePrivate *priv = GET_PRIVATE (device);
-	DfuTarget *target;
 	guint i;
 	g_autoptr(DfuFirmware) firmware = NULL;
+	g_autoptr(DfuTarget) target_default = NULL;
 	g_autoptr(GPtrArray) targets = NULL;
 
 	firmware = dfu_firmware_new ();
 	dfu_firmware_set_vid (firmware, priv->runtime_vid);
 	dfu_firmware_set_pid (firmware, priv->runtime_pid);
-//	dfu_firmware_set_release (firmware, xxxxxxxxxxx);
+	dfu_firmware_set_release (firmware, 0xffff);
 
-	/* switch from runtime to DFU mode */
-	//FIXME
+	/* APP -> DFU */
+	target_default = dfu_device_get_target_default (device, error);
+	if (target_default == NULL)
+		return NULL;
+	if (dfu_target_get_mode (target_default) == DFU_MODE_RUNTIME) {
+		g_debug ("detaching");
+		if (!dfu_target_detach (target_default, NULL, error))
+			return NULL;
+		if (!dfu_device_wait_for_replug (device, 5000, NULL, error))
+			return NULL;
+	}
 
 	/* upload from each target */
 	targets = dfu_device_get_targets (device);
 	for (i = 0; i < targets->len; i++) {
+		DfuTarget *target;
 		g_autoptr(DfuImage) image = NULL;
 		target = g_ptr_array_index (targets, i);
 		image = dfu_target_upload (target, 0,
-					   DFU_TARGET_TRANSFER_FLAG_NONE, 
+					   DFU_TARGET_TRANSFER_FLAG_NONE,
 					   cancellable,
-					   NULL,
-					   NULL,
+					   progress_cb,
+					   progress_cb_data,
 					   error);
 		if (image == NULL)
 			return NULL;
@@ -578,15 +648,111 @@ dfu_device_upload (DfuDevice *device, GCancellable *cancellable, GError **error)
 		dfu_firmware_set_format (firmware, DFU_FIRMWARE_FORMAT_DFU_1_0);
 	}
 
-	/* boot back to runtime */
-	//FIXME
+	/* do host reset */
+	if ((flags & DFU_TARGET_TRANSFER_FLAG_HOST_RESET) > 0 ||
+	    (flags & DFU_TARGET_TRANSFER_FLAG_BOOT_RUNTIME) > 0) {
+		if (!dfu_device_reset (device, error))
+			return NULL;
+	}
+
+	/* boot to runtime */
+	if (flags & DFU_TARGET_TRANSFER_FLAG_BOOT_RUNTIME) {
+		g_debug ("booting to runtime");
+		if (!dfu_device_wait_for_replug (device, 2000, cancellable, error))
+			return NULL;
+	}
 
 	/* success */
 	return g_object_ref (firmware);
 }
 
+/**
+ * dfu_device_download:
+ * @target: a #DfuTarget
+ * @firmware: a #DfuFirmware
+ * @flags: flags to use, e.g. %DFU_TARGET_TRANSFER_FLAG_VERIFY
+ * @cancellable: a #GCancellable, or %NULL
+ * @progress_cb: a #GFileProgressCallback, or %NULL
+ * @progress_cb_data: user data to pass to @progress_cb
+ * @error: a #GError, or %NULL
+ *
+ * Downloads firmware from the host to the target, optionally verifying
+ * the transfer.
+ *
+ * Return value: %TRUE for success
+ *
+ * Since: 0.5.4
+ **/
 gboolean
-dfu_device_download (DfuDevice *device, DfuFirmware *firmware, GCancellable *cancellable, GError **error)
+dfu_device_download (DfuDevice *device,
+		     DfuFirmware *firmware,
+		     DfuTargetTransferFlags flags,
+		     GCancellable *cancellable,
+		     DfuProgressCallback progress_cb,
+		     gpointer progress_cb_data,
+		     GError **error)
 {
+	GPtrArray *images;
+	guint i;
+	g_autoptr(DfuTarget) target_default = NULL;
+	g_autoptr(GPtrArray) targets = NULL;
+
+	/* APP -> DFU */
+	target_default = dfu_device_get_target_default (device, error);
+	if (target_default == NULL)
+		return FALSE;
+	if (dfu_target_get_mode (target_default) == DFU_MODE_RUNTIME) {
+		g_debug ("detaching");
+		if (!dfu_target_detach (target_default, NULL, error))
+			return FALSE;
+		if (!dfu_device_wait_for_replug (device, 5000, NULL, error))
+			return FALSE;
+	}
+
+	/* download each target */
+	images = dfu_firmware_get_images (firmware);
+	if (images->len == 0) {
+		g_set_error_literal (error,
+				     FWUPD_ERROR,
+				     FWUPD_ERROR_INTERNAL,
+				     "no images in firmware file");
+		return FALSE;
+	}
+	for (i = 0; i < images->len; i++) {
+		DfuImage *image;
+		DfuTargetTransferFlags flags_local = DFU_TARGET_TRANSFER_FLAG_NONE;
+		g_autoptr(DfuTarget) target_tmp = NULL;
+		image = g_ptr_array_index (images, i);
+		target_tmp = dfu_device_get_target_by_alt_setting (device,
+								   dfu_image_get_alt_setting (image),
+								   error);
+		if (target_tmp == NULL)
+			return FALSE;
+		if (flags & DFU_TARGET_TRANSFER_FLAG_VERIFY)
+			flags_local = DFU_TARGET_TRANSFER_FLAG_VERIFY;
+		if (!dfu_target_download (target_tmp,
+					  image,
+					  flags_local,
+					  cancellable,
+					  progress_cb,
+					  progress_cb_data,
+					  error))
+			return FALSE;
+	}
+
+	/* do a host reset */
+	if ((flags & DFU_TARGET_TRANSFER_FLAG_HOST_RESET) > 0 ||
+	    (flags & DFU_TARGET_TRANSFER_FLAG_BOOT_RUNTIME) > 0) {
+		if (!dfu_device_reset (device, error))
+			return FALSE;
+	}
+
+	/* boot to runtime */
+	if (flags & DFU_TARGET_TRANSFER_FLAG_BOOT_RUNTIME) {
+		g_debug ("booting to runtime to set auto-boot");
+		if (!dfu_device_wait_for_replug (device, 2000, cancellable, error))
+			return FALSE;
+	}
+
 	return TRUE;
 }

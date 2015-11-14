@@ -44,6 +44,7 @@ DfuElement	*dfu_image_get_element		(DfuImage	*image,
 						 guint8		 idx);
 guint8		 dfu_image_get_alt_setting	(DfuImage	*image);
 const gchar	*dfu_image_get_name		(DfuImage	*image);
+guint32		 dfu_image_get_size		(DfuImage	*image);
 
 void		 dfu_image_add_element		(DfuImage	*image,
 						 DfuElement	*element);

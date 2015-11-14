@@ -21,9 +21,12 @@
 
 /**
  * SECTION:dfu-image
- * @short_description: Object representing a binary image
+ * @short_description: Object representing a a firmware image
  *
- * This object represents an binary blob of data in a DFU file.
+ * A #DfuImage is typically made up of several #DfuElements, although
+ * typically there will only be one.
+ *
+ * See also: #DfuElement
  */
 
 #include "config.h"
@@ -177,6 +180,33 @@ dfu_image_get_name (DfuImage *image)
 	DfuImagePrivate *priv = GET_PRIVATE (image);
 	g_return_val_if_fail (DFU_IS_IMAGE (image), NULL);
 	return priv->name;
+}
+
+/**
+ * dfu_image_get_size:
+ * @image: a #DfuImage
+ *
+ * Gets the size of all the elements in the image.
+ *
+ * This only returns actual data that would be sent to the device and
+ * does not include any padding.
+ *
+ * Return value: a integer value, or 0 if there are no elements.
+ *
+ * Since: 0.5.4
+ **/
+guint32
+dfu_image_get_size (DfuImage *image)
+{
+	DfuImagePrivate *priv = GET_PRIVATE (image);
+	guint32 length = 0;
+	guint i;
+	g_return_val_if_fail (DFU_IS_IMAGE (image), 0);
+	for (i = 0; i < priv->elements->len; i++) {
+		DfuElement *element = g_ptr_array_index (priv->elements, i);
+		length += g_bytes_get_size (dfu_element_get_contents (element));
+	}
+	return length;
 }
 
 /**

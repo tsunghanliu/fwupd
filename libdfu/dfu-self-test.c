@@ -131,6 +131,7 @@ dfu_firmware_raw_func (void)
 	g_assert (image_tmp == NULL);
 	image_tmp = dfu_firmware_get_image (firmware, 0);
 	g_assert (image_tmp != NULL);
+	g_assert_cmpint (dfu_image_get_size (image_tmp), ==, 256);
 	element = dfu_image_get_element (image_tmp, 0);
 	g_assert (element != NULL);
 	no_suffix_contents = dfu_element_get_contents (element);
@@ -179,6 +180,7 @@ dfu_firmware_dfu_func (void)
 	dfu_element_set_contents (element, fw);
 	dfu_image_add_element (image, element);
 	dfu_firmware_add_image (firmware, image);
+	g_assert_cmpint (dfu_firmware_get_size (firmware), ==, 256);
 	data = dfu_firmware_write_data (firmware, &error);
 	g_assert_no_error (error);
 	g_assert (data != NULL);
@@ -192,6 +194,7 @@ dfu_firmware_dfu_func (void)
 	g_assert_cmpint (dfu_firmware_get_pid (firmware), ==, 0x5678);
 	g_assert_cmpint (dfu_firmware_get_release (firmware), ==, 0xfedc);
 	g_assert_cmpint (dfu_firmware_get_format (firmware), ==, DFU_FIRMWARE_FORMAT_DFU_1_0);
+	g_assert_cmpint (dfu_firmware_get_size (firmware), ==, 256);
 
 	/* load a real firmware */
 	filename = dfu_test_get_filename ("kiibohd.dfu.bin");
@@ -207,6 +210,7 @@ dfu_firmware_dfu_func (void)
 	g_assert_cmpint (dfu_firmware_get_pid (firmware), ==, 0xb007);
 	g_assert_cmpint (dfu_firmware_get_release (firmware), ==, 0xffff);
 	g_assert_cmpint (dfu_firmware_get_format (firmware), ==, DFU_FIRMWARE_FORMAT_DFU_1_0);
+	g_assert_cmpint (dfu_firmware_get_size (firmware), ==, 0x8eB4);
 
 	/* can we roundtrip without loosing data */
 	roundtrip_orig = dfu_self_test_get_bytes_for_file (file, &error);
@@ -243,6 +247,7 @@ dfu_firmware_dfuse_func (void)
 	g_assert_cmpint (dfu_firmware_get_pid (firmware), ==, 0x0000);
 	g_assert_cmpint (dfu_firmware_get_release (firmware), ==, 0x0000);
 	g_assert_cmpint (dfu_firmware_get_format (firmware), ==, DFU_FIRMWARE_FORMAT_DFUSE);
+	g_assert_cmpint (dfu_firmware_get_size (firmware), ==, 0x168d5);
 
 	/* can we roundtrip without loosing data */
 	roundtrip_orig = dfu_self_test_get_bytes_for_file (file, &error);

@@ -21,9 +21,15 @@
 
 /**
  * SECTION:dfu-firmware
- * @short_description: Object representing a DFU firmware
+ * @short_description: Object representing a DFU or DfuSe firmware file
  *
- * This object allows reading and writing DFU-suffix files.
+ * This object allows reading and writing firmware files either in
+ * raw, DFU or DfuSe formats.
+ *
+ * A #DfuFirmware is typically made up of several #DfuImages, although
+ * typically there will only be one.
+ *
+ * See also: #DfuImage
  */
 
 #include "config.h"
@@ -153,6 +159,33 @@ dfu_firmware_get_images (DfuFirmware *firmware)
 	DfuFirmwarePrivate *priv = GET_PRIVATE (firmware);
 	g_return_val_if_fail (DFU_IS_FIRMWARE (firmware), NULL);
 	return priv->images;
+}
+
+/**
+ * dfu_firmware_get_size:
+ * @firmware: a #DfuFirmware
+ *
+ * Gets the size of all the images in the firmware.
+ *
+ * This only returns actual data that would be sent to the device and
+ * does not include any padding.
+ *
+ * Return value: a integer value, or 0 if there are no images.
+ *
+ * Since: 0.5.4
+ **/
+guint32
+dfu_firmware_get_size (DfuFirmware *firmware)
+{
+	DfuFirmwarePrivate *priv = GET_PRIVATE (firmware);
+	guint32 length = 0;
+	guint i;
+	g_return_val_if_fail (DFU_IS_FIRMWARE (firmware), 0);
+	for (i = 0; i < priv->images->len; i++) {
+		DfuImage *image = g_ptr_array_index (priv->images, i);
+		length += dfu_image_get_size (image);
+	}
+	return length;
 }
 
 /**

@@ -1,3 +1,6 @@
+SUBDIRS =							\
+	docs
+
 AM_CPPFLAGS = \
 	$(GLIB_CFLAGS)						\
 	$(GUSB_CFLAGS)						\

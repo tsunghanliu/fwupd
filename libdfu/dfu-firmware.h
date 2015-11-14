@@ -82,6 +82,8 @@ guint16		 dfu_firmware_get_vid		(DfuFirmware	*firmware);
 guint16		 dfu_firmware_get_pid		(DfuFirmware	*firmware);
 guint16		 dfu_firmware_get_release	(DfuFirmware	*firmware);
 guint16		 dfu_firmware_get_format	(DfuFirmware	*firmware);
+guint32		 dfu_firmware_get_size		(DfuFirmware	*firmware);
+
 void		 dfu_firmware_add_image		(DfuFirmware	*firmware,
 						 DfuImage	*image);
 void		 dfu_firmware_set_vid		(DfuFirmware	*firmware,
