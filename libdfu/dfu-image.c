@@ -126,7 +126,7 @@ dfu_image_get_elements (DfuImage *image)
 }
 
 /**
- * dfu_image_get_elements:
+ * dfu_image_get_element:
  * @image: a #DfuImage
  * @idx: an array index
  *
@@ -315,10 +315,21 @@ typedef struct __attribute__((packed)) {
 } DfuSeImagePrefix;
 
 /**
- * dfu_image_from_dfuse:
+ * _dfu_image_from_dfuse: (skip)
+ * @data: data buffer
+ * @length: length of @data we can access
+ * @consumed: (out): the number of bytes we consued
+ * @error: a #GError, or %NULL
+ *
+ * Unpacks an image from DfuSe data.
+ *
+ * Returns: a #DfuImage, or %NULL for error
  **/
 DfuImage *
-dfu_image_from_dfuse (const guint8 *data, gsize length, guint32 *consumed, GError **error)
+_dfu_image_from_dfuse (const guint8 *data,
+		      gsize length,
+		      guint32 *consumed,
+		      GError **error)
 {
 	DfuImagePrivate *priv;
 	DfuImage *image = NULL;
@@ -351,7 +362,7 @@ dfu_image_from_dfuse (const guint8 *data, gsize length, guint32 *consumed, GErro
 	for (j = 0; j < im->elements; j++) {
 		guint32 consumed_local;
 		g_autoptr(DfuElement) element = NULL;
-		element = dfu_element_from_dfuse (data + offset, length,
+		element = _dfu_element_from_dfuse (data + offset, length,
 						  &consumed_local, error);
 		if (element == NULL)
 			return NULL;
@@ -367,10 +378,15 @@ dfu_image_from_dfuse (const guint8 *data, gsize length, guint32 *consumed, GErro
 }
 
 /**
- * dfu_image_to_dfuse:
+ * _dfu_image_to_dfuse: (skip)
+ * @image: a #DfuImage
+ *
+ * Packs a DfuSe image
+ *
+ * Returns: (transfer full): the packed data
  **/
 GBytes *
-dfu_image_to_dfuse (DfuImage *image)
+_dfu_image_to_dfuse (DfuImage *image)
 {
 	DfuImagePrivate *priv = GET_PRIVATE (image);
 	DfuElement *element;
@@ -386,7 +402,7 @@ dfu_image_to_dfuse (DfuImage *image)
 	element_array = g_ptr_array_new_with_free_func ((GDestroyNotify) g_bytes_unref);
 	for (i = 0; i < priv->elements->len; i++) {
 		element = g_ptr_array_index (priv->elements, i);
-		bytes = dfu_element_to_dfuse (element);
+		bytes = _dfu_element_to_dfuse (element);
 		g_ptr_array_add (element_array, bytes);
 		length_total += g_bytes_get_size (bytes);
 	}

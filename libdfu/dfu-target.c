@@ -203,7 +203,7 @@ dfu_target_update_from_iface (DfuTarget *target, GUsbInterface *iface)
 		mode = DFU_MODE_DFU;
 
 	/* the DSO Nano has uses 0 instead of 2 when in DFU mode */
-	dev = dfu_device_get_usb_dev (priv->device);
+	dev = _dfu_device_get_usb_dev (priv->device);
 	quirks = dfu_target_get_quirks (dev);
 	if ((quirks & DFU_QUIRK_USE_PROTOCOL_ZERO) &&
 	    g_usb_interface_get_protocol (iface) == 0x00)
@@ -224,8 +224,8 @@ dfu_target_update_from_iface (DfuTarget *target, GUsbInterface *iface)
 
 	/* save for reset */
 	if (mode == DFU_MODE_RUNTIME) {
-		dfu_device_set_runtime_vid (priv->device, g_usb_device_get_vid (dev));
-		dfu_device_set_runtime_pid (priv->device, g_usb_device_get_pid (dev));
+		_dfu_device_set_runtime_vid (priv->device, g_usb_device_get_vid (dev));
+		_dfu_device_set_runtime_pid (priv->device, g_usb_device_get_pid (dev));
 	}
 
 	/* update */
@@ -274,18 +274,19 @@ dfu_target_update_from_iface (DfuTarget *target, GUsbInterface *iface)
 }
 
 /**
- * dfu_target_new:
- * @dev: a #GUsbDevice
+ * _dfu_target_new:
+ * @device: a #DfuDevice
  * @iface: a #GUsbInterface
  *
- * Creates a new DFU wrapper.
+ * Creates a new DFU target, which represents an alt-setting on a
+ * DFU-capable device.
  *
  * Return value: a #DfuTarget, or %NULL if @iface was not DFU-capable
  *
  * Since: 0.5.4
  **/
 DfuTarget *
-dfu_target_new (DfuDevice *device, GUsbInterface *iface)
+_dfu_target_new (DfuDevice *device, GUsbInterface *iface)
 {
 	DfuTargetPrivate *priv;
 	DfuTarget *target;
@@ -457,7 +458,7 @@ dfu_target_open (DfuTarget *target, DfuTargetOpenFlags flags,
 		return FALSE;
 
 	/* claim the correct interface */
-	dev = dfu_device_get_usb_dev (priv->device);
+	dev = _dfu_device_get_usb_dev (priv->device);
 	if (!g_usb_device_claim_interface (dev, (gint) priv->iface_number, 0, &error_local)) {
 		g_set_error (error,
 			     FWUPD_ERROR,
@@ -545,7 +546,7 @@ dfu_target_close (DfuTarget *target, GError **error)
 
 	/* only release if claimed */
 	if (priv->interface_claimed) {
-		dev = dfu_device_get_usb_dev (priv->device);
+		dev = _dfu_device_get_usb_dev (priv->device);
 		if (!g_usb_device_release_interface (dev,
 						     (gint) priv->iface_number,
 						     0,
@@ -586,7 +587,7 @@ dfu_target_refresh (DfuTarget *target, GCancellable *cancellable, GError **error
 	g_return_val_if_fail (DFU_IS_TARGET (target), FALSE);
 	g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
-	if (!g_usb_device_control_transfer (dfu_device_get_usb_dev (priv->device),
+	if (!g_usb_device_control_transfer (_dfu_device_get_usb_dev (priv->device),
 					    G_USB_DEVICE_DIRECTION_DEVICE_TO_HOST,
 					    G_USB_DEVICE_REQUEST_TYPE_CLASS,
 					    G_USB_DEVICE_RECIPIENT_INTERFACE,
@@ -647,7 +648,7 @@ dfu_target_detach (DfuTarget *target, GCancellable *cancellable, GError **error)
 	g_return_val_if_fail (DFU_IS_TARGET (target), FALSE);
 	g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
-	if (!g_usb_device_control_transfer (dfu_device_get_usb_dev (priv->device),
+	if (!g_usb_device_control_transfer (_dfu_device_get_usb_dev (priv->device),
 					    G_USB_DEVICE_DIRECTION_HOST_TO_DEVICE,
 					    G_USB_DEVICE_REQUEST_TYPE_CLASS,
 					    G_USB_DEVICE_RECIPIENT_INTERFACE,
@@ -696,7 +697,7 @@ dfu_target_abort (DfuTarget *target, GCancellable *cancellable, GError **error)
 	g_return_val_if_fail (DFU_IS_TARGET (target), FALSE);
 	g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
-	if (!g_usb_device_control_transfer (dfu_device_get_usb_dev (priv->device),
+	if (!g_usb_device_control_transfer (_dfu_device_get_usb_dev (priv->device),
 					    G_USB_DEVICE_DIRECTION_HOST_TO_DEVICE,
 					    G_USB_DEVICE_REQUEST_TYPE_CLASS,
 					    G_USB_DEVICE_RECIPIENT_INTERFACE,
@@ -718,11 +719,20 @@ dfu_target_abort (DfuTarget *target, GCancellable *cancellable, GError **error)
 }
 
 /**
- * dfu_target_update:
+ * _dfu_target_update:
+ * @target: a #DfuTarget
+ * @iface: a #GUsbInterface
+ * @cancellable: a #GCancellable, or %NULL
+ * @error: a #GError, or %NULL
+ *
+ * Updates the target with new interface data. This only needs to be
+ * done after the device has been reset.
+ * 
+ * Returns: %TRUE for success
  **/
 gboolean
-dfu_target_update (DfuTarget *target, GUsbInterface *iface,
-		   GCancellable *cancellable, GError **error)
+_dfu_target_update (DfuTarget *target, GUsbInterface *iface,
+		    GCancellable *cancellable, GError **error)
 {
 	DfuTargetPrivate *priv = GET_PRIVATE (target);
 	gboolean reclaim_interface = FALSE;
@@ -775,7 +785,7 @@ dfu_target_clear_status (DfuTarget *target, GCancellable *cancellable, GError **
 	g_return_val_if_fail (DFU_IS_TARGET (target), FALSE);
 	g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
-	if (!g_usb_device_control_transfer (dfu_device_get_usb_dev (priv->device),
+	if (!g_usb_device_control_transfer (_dfu_device_get_usb_dev (priv->device),
 					    G_USB_DEVICE_DIRECTION_HOST_TO_DEVICE,
 					    G_USB_DEVICE_REQUEST_TYPE_CLASS,
 					    G_USB_DEVICE_RECIPIENT_INTERFACE,
@@ -809,7 +819,7 @@ dfu_target_upload_chunk (DfuTarget *target, guint8 index,
 	gsize actual_length;
 
 	buf = g_new0 (guint8, priv->transfer_size);
-	if (!g_usb_device_control_transfer (dfu_device_get_usb_dev (priv->device),
+	if (!g_usb_device_control_transfer (_dfu_device_get_usb_dev (priv->device),
 					    G_USB_DEVICE_DIRECTION_DEVICE_TO_HOST,
 					    G_USB_DEVICE_REQUEST_TYPE_CLASS,
 					    G_USB_DEVICE_RECIPIENT_INTERFACE,
@@ -966,7 +976,7 @@ dfu_target_download_chunk (DfuTarget *target, guint8 index, GBytes *bytes,
 	g_autoptr(GError) error_local = NULL;
 	gsize actual_length;
 
-	if (!g_usb_device_control_transfer (dfu_device_get_usb_dev (priv->device),
+	if (!g_usb_device_control_transfer (_dfu_device_get_usb_dev (priv->device),
 					    G_USB_DEVICE_DIRECTION_HOST_TO_DEVICE,
 					    G_USB_DEVICE_REQUEST_TYPE_CLASS,
 					    G_USB_DEVICE_RECIPIENT_INTERFACE,

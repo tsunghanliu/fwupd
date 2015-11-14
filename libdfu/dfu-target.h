@@ -48,7 +48,7 @@ struct _DfuTargetClass
 typedef enum {
 	DFU_TARGET_OPEN_FLAG_NONE		= 0,
 	DFU_TARGET_OPEN_FLAG_NO_AUTO_REFRESH	= (1 << 0),
-	/* private */
+	/*< private >*/
 	DFU_TARGET_OPEN_FLAG_LAST,
 } DfuTargetOpenFlags;
 
@@ -58,6 +58,7 @@ typedef enum {
  * @DFU_TARGET_TRANSFER_FLAG_VERIFY:		Verify the download once complete
  * @DFU_TARGET_TRANSFER_FLAG_HOST_RESET:	Reset the bus when complete
  * @DFU_TARGET_TRANSFER_FLAG_BOOT_RUNTIME:	Boot to runtime when complete
+ * @DFU_TARGET_TRANSFER_FLAG_DETACH:		Automatically detach and reset when in appIDLE mode
  *
  * The optional flags used for transfering firmware.
  **/
@@ -66,7 +67,8 @@ typedef enum {
 	DFU_TARGET_TRANSFER_FLAG_VERIFY		= (1 << 0),
 	DFU_TARGET_TRANSFER_FLAG_HOST_RESET	= (1 << 1),
 	DFU_TARGET_TRANSFER_FLAG_BOOT_RUNTIME	= (1 << 2),
-	/* private */
+	DFU_TARGET_TRANSFER_FLAG_DETACH		= (1 << 3),
+	/*< private >*/
 	DFU_TARGET_TRANSFER_FLAG_LAST,
 } DfuTargetTransferFlags;
 

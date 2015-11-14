@@ -49,16 +49,16 @@ typedef enum {
 	DFU_FIRMWARE_PARSE_FLAG_NONE			= 0,
 	DFU_FIRMWARE_PARSE_FLAG_NO_CRC_TEST		= (1 << 0),
 	DFU_FIRMWARE_PARSE_FLAG_NO_VERSION_TEST		= (1 << 1),
-	/* private */
+	/*< private >*/
 	DFU_FIRMWARE_PARSE_FLAG_LAST,
 } DfuFirmwareParseFlags;
 
 /**
  * DfuFirmwareFormat:
- * @DFU_FIRMWARE_FORMAT_UNKNOWN:			Version number unknown
- * @DFU_FIRMWARE_FORMAT_RAW:				Version number unknown
+ * @DFU_FIRMWARE_FORMAT_UNKNOWN:			Format unknown
+ * @DFU_FIRMWARE_FORMAT_RAW:				Raw format
  * @DFU_FIRMWARE_FORMAT_DFU_1_0:			DFU 1.0
- * @DFU_FIRMWARE_FORMAT_DFUSE:				DfuSe extension detected
+ * @DFU_FIRMWARE_FORMAT_DFUSE:				DfuSe extension
  *
  * The known versions of the DFU standard in BCD format.
  **/
@@ -67,7 +67,7 @@ typedef enum {
 	DFU_FIRMWARE_FORMAT_RAW				= 0x0001,
 	DFU_FIRMWARE_FORMAT_DFU_1_0			= 0x0100,
 	DFU_FIRMWARE_FORMAT_DFUSE			= 0x011a,
-	/* private */
+	/*< private >*/
 	DFU_FIRMWARE_FORMAT_LAST,
 } DfuFirmwareFormat;
 

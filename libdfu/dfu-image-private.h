@@ -26,11 +26,11 @@
 
 G_BEGIN_DECLS
 
-DfuImage	*dfu_image_from_dfuse		(const guint8	*data,
+DfuImage	*_dfu_image_from_dfuse		(const guint8	*data,
 						 gsize		 length,
 						 guint32	*consumed,
 						 GError		**error);
-GBytes		*dfu_image_to_dfuse		(DfuImage	*image);
+GBytes		*_dfu_image_to_dfuse		(DfuImage	*image);
 
 G_END_DECLS
 

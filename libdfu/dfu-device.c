@@ -127,7 +127,7 @@ dfu_device_add_targets (DfuDevice *device)
 			continue;
 		if (g_usb_interface_get_subclass (iface) != 0x01)
 			continue;
-		target = dfu_target_new (device, iface);
+		target = _dfu_target_new (device, iface);
 		if (target == NULL)
 			continue;
 		g_ptr_array_add (priv->targets, target);
@@ -137,6 +137,7 @@ dfu_device_add_targets (DfuDevice *device)
 
 /**
  * dfu_device_new:
+ * @dev: A #GUsbDevice
  *
  * Creates a new DFU device object.
  *
@@ -181,6 +182,7 @@ dfu_device_get_targets (DfuDevice *device)
  * dfu_device_get_target_by_alt_setting:
  * @device: a #DfuDevice
  * @alt_setting: the setting used to find
+ * @error: a #GError, or %NULL
  *
  * Gets a target with a specific alternative setting.
  *
@@ -189,7 +191,9 @@ dfu_device_get_targets (DfuDevice *device)
  * Since: 0.5.4
  **/
 DfuTarget *
-dfu_device_get_target_by_alt_setting (DfuDevice *device, guint8 alt_setting, GError **error)
+dfu_device_get_target_by_alt_setting (DfuDevice *device,
+				      guint8 alt_setting,
+				      GError **error)
 {
 	DfuDevicePrivate *priv = GET_PRIVATE (device);
 	DfuTarget *target;
@@ -217,6 +221,7 @@ dfu_device_get_target_by_alt_setting (DfuDevice *device, guint8 alt_setting, GEr
 /**
  * dfu_device_get_target_default:
  * @device: a #DfuDevice
+ * @error: a #GError, or %NULL
  *
  * Gets the default target.
  *
@@ -247,6 +252,7 @@ dfu_device_get_target_default (DfuDevice *device, GError **error)
  * dfu_device_get_target_by_alt_name:
  * @device: a #DfuDevice
  * @alt_name: the name used to find
+ * @error: a #GError, or %NULL
  *
  * Gets a target with a specific alternative name.
  *
@@ -255,7 +261,9 @@ dfu_device_get_target_default (DfuDevice *device, GError **error)
  * Since: 0.5.4
  **/
 DfuTarget *
-dfu_device_get_target_by_alt_name (DfuDevice *device, const gchar *alt_name, GError **error)
+dfu_device_get_target_by_alt_name (DfuDevice *device,
+				   const gchar *alt_name,
+				   GError **error)
 {
 	DfuDevicePrivate *priv = GET_PRIVATE (device);
 	DfuTarget *target;
@@ -317,7 +325,7 @@ dfu_device_get_runtime_pid (DfuDevice *device)
 }
 
 /**
- * dfu_device_set_runtime_vid:
+ * _dfu_device_set_runtime_vid:
  * @device: a #DfuDevice
  * @runtime_vid: a vendor ID, or 0xffff for unknown
  *
@@ -326,7 +334,7 @@ dfu_device_get_runtime_pid (DfuDevice *device)
  * Since: 0.5.4
  **/
 void
-dfu_device_set_runtime_vid (DfuDevice *device, guint16 runtime_vid)
+_dfu_device_set_runtime_vid (DfuDevice *device, guint16 runtime_vid)
 {
 	DfuDevicePrivate *priv = GET_PRIVATE (device);
 	g_return_if_fail (DFU_IS_DEVICE (device));
@@ -334,16 +342,16 @@ dfu_device_set_runtime_vid (DfuDevice *device, guint16 runtime_vid)
 }
 
 /**
- * dfu_device_set_runtime_pid:
+ * _dfu_device_set_runtime_pid:
  * @device: a #DfuDevice
- * @runtime_vid: a product ID, or 0xffff for unknown
+ * @runtime_pid: a product ID, or 0xffff for unknown
  *
  * Sets the runtime product ID.
  *
  * Since: 0.5.4
  **/
 void
-dfu_device_set_runtime_pid (DfuDevice *device, guint16 runtime_pid)
+_dfu_device_set_runtime_pid (DfuDevice *device, guint16 runtime_pid)
 {
 	DfuDevicePrivate *priv = GET_PRIVATE (device);
 	g_return_if_fail (DFU_IS_DEVICE (device));
@@ -351,10 +359,18 @@ dfu_device_set_runtime_pid (DfuDevice *device, guint16 runtime_pid)
 }
 
 /**
- * dfu_device_get_usb_dev: (skip)
+ * _dfu_device_get_usb_dev: (skip)
+ * @device: a #DfuDevice
+ *
+ * Gets the internal USB device for the #DfuDevice.
+ *
+ * NOTE: This may change at runtime if the device is replugged or
+ * reset.
+ *
+ * Returns: (transfer none): the internal USB device
  **/
 GUsbDevice *
-dfu_device_get_usb_dev (DfuDevice *device)
+_dfu_device_get_usb_dev (DfuDevice *device)
 {
 	DfuDevicePrivate *priv = GET_PRIVATE (device);
 	g_return_val_if_fail (DFU_IS_DEVICE (device), NULL);
@@ -466,7 +482,7 @@ dfu_device_set_new_usb_dev (DfuDevice *device, GUsbDevice *dev,
 		target = dfu_device_get_target_by_alt_setting (device, alt_setting, NULL);
 		if (target == NULL)
 			continue;
-		if (!dfu_target_update (target, iface, cancellable, error))
+		if (!_dfu_target_update (target, iface, cancellable, error))
 			return FALSE;
 	}
 	return dfu_device_open (device, error);
@@ -578,8 +594,8 @@ dfu_device_reset (DfuDevice *device, GError **error)
 /**
  * dfu_device_upload:
  * @device: a #DfuDevice
- * @flags: flags to use, e.g. %DFU_TARGET_TRANSFER_FLAG_VERIFY
  * @expected_size: the expected size of the firmware, or 0 for unknown
+ * @flags: flags to use, e.g. %DFU_TARGET_TRANSFER_FLAG_VERIFY
  * @cancellable: a #GCancellable, or %NULL
  * @progress_cb: a #GFileProgressCallback, or %NULL
  * @progress_cb_data: user data to pass to @progress_cb
@@ -601,26 +617,37 @@ dfu_device_upload (DfuDevice *device,
 		   GError **error)
 {
 	DfuDevicePrivate *priv = GET_PRIVATE (device);
+	gboolean auto_opened = FALSE;
 	guint i;
 	g_autoptr(DfuFirmware) firmware = NULL;
 	g_autoptr(DfuTarget) target_default = NULL;
 	g_autoptr(GPtrArray) targets = NULL;
 
+	/* auto-open */
+	if (!priv->device_open) {
+		if (!dfu_device_open (device, error))
+			return FALSE;
+		auto_opened = TRUE;
+	}
+
+	/* create ahead of time */
 	firmware = dfu_firmware_new ();
 	dfu_firmware_set_vid (firmware, priv->runtime_vid);
 	dfu_firmware_set_pid (firmware, priv->runtime_pid);
 	dfu_firmware_set_release (firmware, 0xffff);
 
 	/* APP -> DFU */
-	target_default = dfu_device_get_target_default (device, error);
-	if (target_default == NULL)
-		return NULL;
-	if (dfu_target_get_mode (target_default) == DFU_MODE_RUNTIME) {
-		g_debug ("detaching");
-		if (!dfu_target_detach (target_default, NULL, error))
+	if (flags & DFU_TARGET_TRANSFER_FLAG_DETACH) {
+		target_default = dfu_device_get_target_default (device, error);
+		if (target_default == NULL)
 			return NULL;
-		if (!dfu_device_wait_for_replug (device, 5000, NULL, error))
-			return NULL;
+		if (dfu_target_get_mode (target_default) == DFU_MODE_RUNTIME) {
+			g_debug ("detaching");
+			if (!dfu_target_detach (target_default, NULL, error))
+				return NULL;
+			if (!dfu_device_wait_for_replug (device, 5000, NULL, error))
+				return NULL;
+		}
 	}
 
 	/* upload from each target */
@@ -662,13 +689,19 @@ dfu_device_upload (DfuDevice *device,
 			return NULL;
 	}
 
+	/* auto-close */
+	if (auto_opened) {
+		if (!dfu_device_close (device, error))
+			return FALSE;
+	}
+
 	/* success */
 	return g_object_ref (firmware);
 }
 
 /**
  * dfu_device_download:
- * @target: a #DfuTarget
+ * @device: a #DfuDevice
  * @firmware: a #DfuFirmware
  * @flags: flags to use, e.g. %DFU_TARGET_TRANSFER_FLAG_VERIFY
  * @cancellable: a #GCancellable, or %NULL
@@ -692,21 +725,32 @@ dfu_device_download (DfuDevice *device,
 		     gpointer progress_cb_data,
 		     GError **error)
 {
+	DfuDevicePrivate *priv = GET_PRIVATE (device);
 	GPtrArray *images;
+	gboolean auto_opened = FALSE;
 	guint i;
 	g_autoptr(DfuTarget) target_default = NULL;
 	g_autoptr(GPtrArray) targets = NULL;
 
+	/* auto-open */
+	if (!priv->device_open) {
+		if (!dfu_device_open (device, error))
+			return FALSE;
+		auto_opened = TRUE;
+	}
+
 	/* APP -> DFU */
-	target_default = dfu_device_get_target_default (device, error);
-	if (target_default == NULL)
-		return FALSE;
-	if (dfu_target_get_mode (target_default) == DFU_MODE_RUNTIME) {
-		g_debug ("detaching");
-		if (!dfu_target_detach (target_default, NULL, error))
+	if (flags & DFU_TARGET_TRANSFER_FLAG_DETACH) {
+		target_default = dfu_device_get_target_default (device, error);
+		if (target_default == NULL)
 			return FALSE;
-		if (!dfu_device_wait_for_replug (device, 5000, NULL, error))
-			return FALSE;
+		if (dfu_target_get_mode (target_default) == DFU_MODE_RUNTIME) {
+			g_debug ("detaching");
+			if (!dfu_target_detach (target_default, NULL, error))
+				return FALSE;
+			if (!dfu_device_wait_for_replug (device, 5000, NULL, error))
+				return FALSE;
+		}
 	}
 
 	/* download each target */
@@ -751,6 +795,12 @@ dfu_device_download (DfuDevice *device,
 	if (flags & DFU_TARGET_TRANSFER_FLAG_BOOT_RUNTIME) {
 		g_debug ("booting to runtime to set auto-boot");
 		if (!dfu_device_wait_for_replug (device, 2000, cancellable, error))
+			return FALSE;
+	}
+
+	/* auto-close */
+	if (auto_opened) {
+		if (!dfu_device_close (device, error))
 			return FALSE;
 	}
 

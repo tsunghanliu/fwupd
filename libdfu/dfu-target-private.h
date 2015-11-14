@@ -29,9 +29,9 @@
 
 G_BEGIN_DECLS
 
-DfuTarget	*dfu_target_new				(DfuDevice	*device,
+DfuTarget	*_dfu_target_new			(DfuDevice	*device,
 							 GUsbInterface	*iface);
-gboolean	 dfu_target_update			(DfuTarget	*target,
+gboolean	 _dfu_target_update			(DfuTarget	*target,
 							 GUsbInterface	*iface,
 							 GCancellable	*cancellable,
 							 GError		**error);

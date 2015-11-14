@@ -30,10 +30,10 @@
 
 G_BEGIN_DECLS
 
-GUsbDevice	*dfu_device_get_usb_dev			(DfuDevice	*device);
-void		 dfu_device_set_runtime_vid		(DfuDevice	*device,
+GUsbDevice	*_dfu_device_get_usb_dev		(DfuDevice	*device);
+void		 _dfu_device_set_runtime_vid		(DfuDevice	*device,
 							 guint16	 runtime_vid);
-void		 dfu_device_set_runtime_pid		(DfuDevice	*device,
+void		 _dfu_device_set_runtime_pid		(DfuDevice	*device,
 							 guint16	 runtime_pid);
 
 G_END_DECLS

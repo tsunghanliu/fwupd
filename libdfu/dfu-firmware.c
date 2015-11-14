@@ -26,8 +26,8 @@
  * This object allows reading and writing firmware files either in
  * raw, DFU or DfuSe formats.
  *
- * A #DfuFirmware is typically made up of several #DfuImages, although
- * typically there will only be one.
+ * A #DfuFirmware can be made up of several #DfuImages, although
+ * typically there is only one.
  *
  * See also: #DfuImage
  */
@@ -642,7 +642,7 @@ dfu_firmware_add_dfuse (DfuFirmware *firmware, GBytes *bytes, GError **error)
 	for (i = 0; i < prefix->targets; i++) {
 		guint consumed;
 		g_autoptr(DfuImage) image = NULL;
-		image = dfu_image_from_dfuse (data + offset,
+		image = _dfu_image_from_dfuse (data + offset,
 					      len - offset,
 					      &consumed,
 					      error);
@@ -673,7 +673,7 @@ dfu_firmware_write_data_dfuse (DfuFirmware *firmware, GError **error)
 	for (i = 0; i < priv->images->len; i++) {
 		DfuImage *im = g_ptr_array_index (priv->images, i);
 		GBytes *contents;
-		contents = dfu_image_to_dfuse (im);
+		contents = _dfu_image_to_dfuse (im);
 		image_size_total += g_bytes_get_size (contents);
 		g_ptr_array_add (dfuse_images, contents);
 	}
