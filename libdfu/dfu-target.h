@@ -105,7 +105,6 @@ gboolean	 dfu_target_clear_status		(DfuTarget	*target,
 							 GCancellable	*cancellable,
 							 GError		**error);
 DfuImage	*dfu_target_upload			(DfuTarget	*target,
-							 gsize		 expected_size,
 							 DfuTargetTransferFlags flags,
 							 GCancellable	*cancellable,
 							 DfuProgressCallback progress_cb,

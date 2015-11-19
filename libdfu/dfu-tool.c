@@ -860,7 +860,7 @@ dfu_tool_upload_target (DfuToolPrivate *priv, gchar **values, GError **error)
 	helper.last_state = DFU_STATE_DFU_ERROR;
 	helper.marks_total = 30;
 	helper.marks_shown = 0;
-	image = dfu_target_upload (target, 0, flags, NULL,
+	image = dfu_target_upload (target, flags, NULL,
 				   fu_tool_transfer_progress_cb, &helper,
 				   error);
 	if (image == NULL)
@@ -927,7 +927,7 @@ dfu_tool_upload (DfuToolPrivate *priv, gchar **values, GError **error)
 	helper.last_state = DFU_STATE_DFU_ERROR;
 	helper.marks_total = 30;
 	helper.marks_shown = 0;
-	firmware = dfu_device_upload (device, 0, flags, NULL,
+	firmware = dfu_device_upload (device, flags, NULL,
 				      fu_tool_transfer_progress_cb, &helper,
 				      error);
 	if (firmware == NULL)

@@ -609,7 +609,6 @@ dfu_device_reset (DfuDevice *device, GError **error)
  **/
 DfuFirmware *
 dfu_device_upload (DfuDevice *device,
-		   gsize expected_size,
 		   DfuTargetTransferFlags flags,
 		   GCancellable *cancellable,
 		   DfuProgressCallback progress_cb,
@@ -664,7 +663,12 @@ dfu_device_upload (DfuDevice *device,
 		DfuTarget *target;
 		g_autoptr(DfuImage) image = NULL;
 		target = g_ptr_array_index (targets, i);
-		image = dfu_target_upload (target, 0,
+		if (!dfu_target_open (target,
+				      DFU_TARGET_OPEN_FLAG_NONE,
+				      cancellable,
+				      error))
+			return NULL;
+		image = dfu_target_upload (target,
 					   DFU_TARGET_TRANSFER_FLAG_NONE,
 					   cancellable,
 					   progress_cb,
