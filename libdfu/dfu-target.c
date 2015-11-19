@@ -82,6 +82,13 @@ typedef struct {
 	DfuSectorCapability	 cap;
 } DfuSector;
 
+typedef enum {
+	DFU_CMD_DFUSE_GET_COMMAND		= 0x00,
+	DFU_CMD_DFUSE_SET_ADDRESS_POINTER	= 0x21,
+	DFU_CMD_DFUSE_ERASE			= 0x41,
+	DFU_CMD_DFUSE_READ_UNPROTECT		= 0x92,
+} DfuCmdDfuse;
+
 /**
  * DfuTargetPrivate:
  *
@@ -176,12 +183,12 @@ dfu_target_sectors_to_string (DfuTarget *target)
 }
 
 /**
- * dfu_target_dfuse_sectors_reset:
+ * dfu_target_sectors_erase_reset:
  *
  * Reset all the 'is_erased' flags in the sector.
  **/
 static void
-dfu_target_dfuse_sectors_reset (DfuTarget *target)
+dfu_target_sectors_erase_reset (DfuTarget *target)
 {
 	DfuTargetPrivate *priv = GET_PRIVATE (target);
 	DfuSector *sect;
@@ -193,12 +200,12 @@ dfu_target_dfuse_sectors_reset (DfuTarget *target)
 }
 
 /**
- * dfu_target_dfuse_get_sector_for_addr:
+ * dfu_target_get_sector_for_addr:
  *
  * Returns: the sector that should be used for a specific address, or %NULL
  **/
 static DfuSector *
-dfu_target_dfuse_get_sector_for_addr (DfuTarget *target, guint32 addr)
+dfu_target_get_sector_for_addr (DfuTarget *target, guint32 addr)
 {
 	DfuTargetPrivate *priv = GET_PRIVATE (target);
 	DfuSector *sect;
@@ -720,6 +727,96 @@ dfu_target_set_transfer_size (DfuTarget *target, guint16 transfer_size)
 }
 
 /**
+ * dfu_target_error_fixup:
+ **/
+static void
+dfu_target_error_fixup (DfuTarget *target,
+			GCancellable *cancellable,
+			GError **error)
+{
+	DfuTargetPrivate *priv = GET_PRIVATE (target);
+
+	/* sad panda */
+	if (error == NULL)
+		return;
+
+	/* not the right error to query */
+	if (!g_error_matches (*error,
+			      G_USB_DEVICE_ERROR,
+			      G_USB_DEVICE_ERROR_NOT_SUPPORTED))
+		return;
+
+	/* get the status */
+	if (!dfu_target_refresh (target, cancellable, NULL))
+		return;
+
+	/* not in an error state */
+	if (priv->state != DFU_STATE_DFU_ERROR)
+		return;
+
+	/* prefix the error */
+	switch (priv->status) {
+	case DFU_STATUS_OK:
+		/* ignore */
+		break;
+	case DFU_STATUS_ERR_VENDOR:
+		g_prefix_error (error, "read protection is active: ");
+		break;
+	default:
+		g_prefix_error (error, "[%s,%s]: ",
+				dfu_state_to_string (priv->state),
+				dfu_status_to_string (priv->status));
+		break;
+	}
+}
+
+/**
+ * dfu_target_check_status:
+ **/
+static gboolean
+dfu_target_check_status (DfuTarget *target,
+			 GCancellable *cancellable,
+			 GError **error)
+{
+	DfuTargetPrivate *priv = GET_PRIVATE (target);
+
+	/* get the status */
+	if (!dfu_target_refresh (target, cancellable, error))
+		return FALSE;
+
+	/* not in an error state */
+	if (priv->state != DFU_STATE_DFU_ERROR)
+		return TRUE;
+
+	/* read protection */
+	if (priv->dfuse_supported) {
+		if (priv->status == DFU_STATUS_ERR_VENDOR) {
+			g_set_error (error,
+				     DFU_ERROR,
+				     DFU_ERROR_NOT_SUPPORTED,
+				     "failed, read protection is active");
+			return FALSE;
+		}
+		if (priv->status == DFU_STATUS_ERR_TARGET) {
+			g_set_error (error,
+				     DFU_ERROR,
+				     DFU_ERROR_NOT_SUPPORTED,
+				     "failed, address is wrong or unsupported");
+			return FALSE;
+		}
+	}
+
+	/* prefix the error */
+	g_set_error (error,
+		     DFU_ERROR,
+		     DFU_ERROR_NOT_SUPPORTED,
+		     "failed, state:%s status:%s]: ",
+		     dfu_state_to_string (priv->state),
+		     dfu_status_to_string (priv->status));
+	return FALSE;
+}
+
+/**
  * dfu_target_open:
  * @target: a #DfuTarget
  * @flags: #DfuTargetOpenFlags, e.g. %DFU_TARGET_OPEN_FLAG_NONE
@@ -966,6 +1063,8 @@ dfu_target_detach (DfuTarget *target, GCancellable *cancellable, GError **error)
 					    priv->timeout_ms,
 					    cancellable,
 					    &error_local)) {
+		/* refresh the error code */
+		dfu_target_error_fixup (target, cancellable, &error_local);
 		g_set_error (error,
 			     DFU_ERROR,
 			     DFU_ERROR_NOT_SUPPORTED,
@@ -1015,6 +1114,8 @@ dfu_target_abort (DfuTarget *target, GCancellable *cancellable, GError **error)
 					    priv->timeout_ms,
 					    cancellable,
 					    &error_local)) {
+		/* refresh the error code */
+		dfu_target_error_fixup (target, cancellable, &error_local);
 		g_set_error (error,
 			     DFU_ERROR,
 			     DFU_ERROR_NOT_SUPPORTED,
@@ -1022,6 +1123,7 @@ dfu_target_abort (DfuTarget *target, GCancellable *cancellable, GError **error)
 			     error_local->message);
 		return FALSE;
 	}
+
 	return TRUE;
 }
 
@@ -1103,6 +1205,8 @@ dfu_target_clear_status (DfuTarget *target, GCancellable *cancellable, GError **
 					    priv->timeout_ms,
 					    cancellable,
 					    &error_local)) {
+		/* refresh the error code */
+		dfu_target_error_fixup (target, cancellable, &error_local);
 		g_set_error (error,
 			     DFU_ERROR,
 			     DFU_ERROR_NOT_SUPPORTED,
@@ -1137,63 +1241,215 @@ dfu_target_download_chunk (DfuTarget *target, guint8 index, GBytes *bytes,
 					    priv->timeout_ms,
 					    cancellable,
 					    &error_local)) {
+		/* refresh the error code */
+		dfu_target_error_fixup (target, cancellable, &error_local);
 		g_set_error (error,
 			     DFU_ERROR,
 			     DFU_ERROR_NOT_SUPPORTED,
-			     "cannot download data to the target (state: %s): %s",
-			     dfu_state_to_string (priv->state),
+			     "cannot download data: %s",
 			     error_local->message);
 		return FALSE;
 	}
+
+	/* for ST devices, the action only occurs when we do GetStatus */
+	if (!dfu_target_check_status (target, cancellable, error))
+		return FALSE;
+
 	g_assert (actual_length == g_bytes_get_size (bytes));
 	return TRUE;
 }
 
 /**
- * dfu_target_dfuse_set_addr:
+ * dfu_target_set_address:
+ * @target: a #DfuTarget
+ * @address: memory address
+ * @cancellable: a #GCancellable, or %NULL
+ * @error: a #GError, or %NULL
+ *
+ * Sets the address used for the next download or upload request.
+ *
+ * IMPORTANT: This only works on DfuSe-capable devices from ST.
+ *
+ * Return value: %TRUE for success
+ *
+ * Since: 0.5.4
  **/
 static gboolean
-dfu_target_dfuse_set_addr (DfuTarget *target,
-			   guint32 address,
-			   GCancellable *cancellable,
-			   GError **error)
-{
-	GBytes *data_in;
-	guint8 buf[5];
-
-	/* format buffer */
-	buf[0] = 0x21;
-	memcpy (buf + 1, &address, 4);
-	data_in = g_bytes_new_static (buf, sizeof(buf));
-	if (!dfu_target_download_chunk (target, 0, data_in, cancellable, error))
-		return FALSE;
-
-	// FIXME: do we have to do GetStatus?
-	return TRUE;
-}
-
-/**
- * dfu_target_dfuse_erase:
- **/
-static gboolean
-dfu_target_dfuse_erase (DfuTarget *target,
+dfu_target_set_address (DfuTarget *target,
 			guint32 address,
 			GCancellable *cancellable,
 			GError **error)
 {
+	DfuTargetPrivate *priv = GET_PRIVATE (target);
 	GBytes *data_in;
 	guint8 buf[5];
 
+	/* invalid */
+	if (!priv->dfuse_supported) {
+		g_set_error_literal (error,
+				     DFU_ERROR,
+				     DFU_ERROR_NOT_SUPPORTED,
+				     "only supported for DfuSe targets");
+		return FALSE;
+	}
+
 	/* format buffer */
-	buf[0] = 0x41;
+	buf[0] = DFU_CMD_DFUSE_SET_ADDRESS_POINTER;
 	memcpy (buf + 1, &address, 4);
 	data_in = g_bytes_new_static (buf, sizeof(buf));
 	if (!dfu_target_download_chunk (target, 0, data_in, cancellable, error))
 		return FALSE;
 
-	// FIXME: do we have to do GetStatus?
+	/* for ST devices, the action only occurs when we do GetStatus */
+	if (!dfu_target_check_status (target, cancellable, error))
+		return FALSE;
 	return TRUE;
 }
+
+/**
+ * dfu_target_erase_address:
+ * @target: a #DfuTarget
+ * @address: memory address
+ * @cancellable: a #GCancellable, or %NULL
+ * @error: a #GError, or %NULL
+ *
+ * Erases a memory sector at a given address.
+ *
+ * IMPORTANT: This only works on DfuSe-capable devices from ST.
+ *
+ * Return value: %TRUE for success
+ *
+ * Since: 0.5.4
+ **/
+static gboolean
+dfu_target_erase_address (DfuTarget *target,
+			  guint32 address,
+			  GCancellable *cancellable,
+			  GError **error)
+{
+	DfuTargetPrivate *priv = GET_PRIVATE (target);
+	GBytes *data_in;
+	guint8 buf[5];
+
+	/* invalid */
+	if (!priv->dfuse_supported) {
+		g_set_error_literal (error,
+				     DFU_ERROR,
+				     DFU_ERROR_NOT_SUPPORTED,
+				     "only supported for DfuSe targets");
+		return FALSE;
+	}
+
+	/* format buffer */
+	buf[0] = DFU_CMD_DFUSE_ERASE;
+	memcpy (buf + 1, &address, 4);
+	data_in = g_bytes_new_static (buf, sizeof(buf));
+	if (!dfu_target_download_chunk (target, 0, data_in, cancellable, error))
+		return FALSE;
+
+	/* for ST devices, the action only occurs when we do GetStatus */
+	if (!dfu_target_check_status (target, cancellable, error))
+		return FALSE;
+
+	/* 2nd check required to get error code */
+	return dfu_target_check_status (target, cancellable, error);
+}
+
+#if 0
+
+/**
+ * dfu_target_mass_erase:
+ * @target: a #DfuTarget
+ * @cancellable: a #GCancellable, or %NULL
+ * @error: a #GError, or %NULL
+ *
+ * Mass erases the device clearing all SRAM and EEPROM memory.
+ *
+ * This may not be supported on all devices, a better way of doing this action
+ * is to enable read protection and then doing dfu_target_read_unprotect().
+ *
+ * IMPORTANT: This only works on DfuSe-capable devices from ST.
+ *
+ * Return value: %TRUE for success
+ *
+ * Since: 0.5.4
+ **/
+static gboolean
+dfu_target_mass_erase (DfuTarget *target,
+		       GCancellable *cancellable,
+		       GError **error)
+{
+	DfuTargetPrivate *priv = GET_PRIVATE (target);
+	GBytes *data_in;
+	guint8 buf[1];
+
+	/* invalid */
+	if (!priv->dfuse_supported) {
+		g_set_error_literal (error,
+				     DFU_ERROR,
+				     DFU_ERROR_NOT_SUPPORTED,
+				     "only supported for DfuSe targets");
+		return FALSE;
+	}
+
+	/* format buffer */
+	buf[0] = DFU_CMD_DFUSE_ERASE;
+	data_in = g_bytes_new_static (buf, sizeof(buf));
+	if (!dfu_target_download_chunk (target, 0, data_in, cancellable, error))
+		return FALSE;
+
+	/* for ST devices, the action only occurs when we do GetStatus */
+	if (!dfu_target_check_status (target, cancellable, error))
+		return FALSE;
+
+	/* 2nd check required to get error code */
+	return dfu_target_check_status (target, cancellable, error);
+}
+
+/**
+ * dfu_target_read_unprotect:
+ * @target: a #DfuTarget
+ * @cancellable: a #GCancellable, or %NULL
+ * @error: a #GError, or %NULL
+ *
+ * Turns of read protection on the device, clearing all SRAM and EEPROM memory.
+ *
+ * IMPORTANT: This only works on DfuSe-capable devices from ST.
+ *
+ * Return value: %TRUE for success
+ *
+ * Since: 0.5.4
+ **/
+static gboolean
+dfu_target_read_unprotect (DfuTarget *target,
+			   GCancellable *cancellable,
+			   GError **error)
+{
+	DfuTargetPrivate *priv = GET_PRIVATE (target);
+	GBytes *data_in;
+	guint8 buf[5];
+
+	/* invalid */
+	if (!priv->dfuse_supported) {
+		g_set_error_literal (error,
+				     DFU_ERROR,
+				     DFU_ERROR_NOT_SUPPORTED,
+				     "only supported for DfuSe targets");
+		return FALSE;
+	}
+
+	/* format buffer */
+	buf[0] = DFU_CMD_DFUSE_READ_UNPROTECT;
+	memcpy (buf + 1, &address, 4);
+	data_in = g_bytes_new_static (buf, sizeof(buf));
+	if (!dfu_target_download_chunk (target, 0, data_in, cancellable, error))
+		return FALSE;
+
+	/* for ST devices, the action only occurs when we do GetStatus */
+	return dfu_target_check_status (target, cancellable, error);
+}
+
+#endif
 
 /**
  * dfu_target_upload_chunk:
@@ -1220,13 +1476,20 @@ dfu_target_upload_chunk (DfuTarget *target, guint8 index,
 					    priv->timeout_ms,
 					    cancellable,
 					    &error_local)) {
+		/* refresh the error code */
+		dfu_target_error_fixup (target, cancellable, &error_local);
 		g_set_error (error,
 			     DFU_ERROR,
 			     DFU_ERROR_NOT_SUPPORTED,
-			     "cannot clear status on the target: %s",
+			     "cannot upload data: %s",
 			     error_local->message);
 		return NULL;
 	}
+
+	/* for ST devices, the action only occurs when we do GetStatus */
+	if (!dfu_target_check_status (target, cancellable, error))
+		return FALSE;
+
 	return g_bytes_new_take (buf, actual_length);
 }
 
@@ -1270,7 +1533,7 @@ dfu_target_upload_element (DfuTarget *target,
 		if (priv->dfuse_supported) {
 
 			/* check the sector with this element address is suitable */
-			sect = dfu_target_dfuse_get_sector_for_addr (target, offset);
+			sect = dfu_target_get_sector_for_addr (target, offset);
 			if (sect == NULL) {
 				g_set_error (error,
 					     DFU_ERROR,
@@ -1291,7 +1554,7 @@ dfu_target_upload_element (DfuTarget *target,
 			/* manually set the sector address */
 			if (sect->number != dfuse_last_sector) {
 				g_debug ("setting DfuSe address to 0x%04x", (guint) offset);
-				if (!dfu_target_dfuse_set_addr (target,
+				if (!dfu_target_set_address (target,
 								offset,
 								cancellable,
 								error))
@@ -1546,7 +1809,7 @@ dfu_target_download_element (DfuTarget *target,
 		if (priv->dfuse_supported) {
 
 			/* check the sector with this element address is suitable */
-			sect = dfu_target_dfuse_get_sector_for_addr (target, offset);
+			sect = dfu_target_get_sector_for_addr (target, offset);
 			if (sect == NULL) {
 				g_set_error (error,
 					     DFU_ERROR,
@@ -1568,10 +1831,10 @@ dfu_target_download_element (DfuTarget *target,
 			if (sect->cap & DFU_SECTOR_CAPABILITY_ERASEABLE &&
 			    !sect->is_erased) {
 				g_debug ("erasing DfuSe address at 0x%04x", (guint) offset);
-				if (!dfu_target_dfuse_erase (target,
-							     offset,
-							     cancellable,
-							     error))
+				if (!dfu_target_erase_address (target,
+							       offset,
+							       cancellable,
+							       error))
 					return FALSE;
 				sect->is_erased = TRUE;
 			}
@@ -1579,10 +1842,10 @@ dfu_target_download_element (DfuTarget *target,
 			/* manually set the sector address */
 			if (sect->number != dfuse_last_sector) {
 				g_debug ("setting DfuSe address to 0x%04x", (guint) offset);
-				if (!dfu_target_dfuse_set_addr (target,
-								offset,
-								cancellable,
-								error))
+				if (!dfu_target_set_address (target,
+							     offset,
+							     cancellable,
+							     error))
 					return FALSE;
 				dfuse_last_sector = sect->number;
 			}
@@ -1603,13 +1866,8 @@ dfu_target_download_element (DfuTarget *target,
 						i + dfuse_sector_offset,
 						bytes_tmp,
 						cancellable,
-						error)) {
-			if (dfu_target_refresh (target, cancellable, NULL)) {
-				g_prefix_error (error, "Device status %s: ",
-						dfu_status_to_string (priv->status));
-			}
+						error))
 			return FALSE;
-		}
 
 		/* update UI */
 		if (progress_cb != NULL) {
@@ -1702,7 +1960,7 @@ dfu_target_download (DfuTarget *target, DfuImage *image,
 
 	/* mark these as all erased */
 	if (priv->dfuse_supported)
-		dfu_target_dfuse_sectors_reset (target);
+		dfu_target_sectors_erase_reset (target);
 
 	/* download all elements in the image to the device */
 	elements = dfu_image_get_elements (image);
@@ -1748,19 +2006,28 @@ dfu_target_download (DfuTarget *target, DfuImage *image,
 
 #if 0
 /**
- * dfu_target_dfuse_get_commands:
+ * dfu_target_get_commands:
  **/
 static gboolean
-dfu_target_dfuse_get_commands (DfuTarget *target,
-			       GCancellable *cancellable,
-			       GError **error)
+dfu_target_get_commands (DfuTarget *target,
+			 GCancellable *cancellable,
+			 GError **error)
 {
 	GBytes *data_in;
 	GBytes *data_out;
 	guint8 buf[1];
 
+	/* invalid */
+	if (!priv->dfuse_supported) {
+		g_set_error_literal (error,
+				     DFU_ERROR,
+				     DFU_ERROR_NOT_SUPPORTED,
+				     "only supported for DfuSe targets");
+		return FALSE;
+	}
+
 	/* format buffer */
-	buf[0] = 0x00;
+	buf[0] = DFU_CMD_DFUSE_GET_COMMAND;
 	data_in = g_bytes_new_static (buf, sizeof(buf));
 	if (!dfu_target_download_chunk (target, 0, data_in, cancellable, error))
 		return FALSE;
@@ -1769,6 +2036,9 @@ dfu_target_dfuse_get_commands (DfuTarget *target,
 	data_out = dfu_target_upload_chunk (target, 0, cancellable, error);
 	if (data_out == NULL)
 		return FALSE;
+
+	// N bytes,
+	// each byte is the command code
 
 	// FIXME: parse?
 	return TRUE;
