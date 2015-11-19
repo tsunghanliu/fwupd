@@ -1197,7 +1197,7 @@ dfu_tool_list (DfuToolPrivate *priv, gchar **values, GError **error)
 					       DFU_TARGET_OPEN_FLAG_NONE,
 					       NULL, &error_local);
 			g_print ("Found %s: [%04x:%04x] ver=%04x, devnum=%i, "
-				 "cfg=%i, intf=%i, ts=%i, alt=%i, name=%s",
+				 "cfg=%i, intf=%i, ts=%i, alt=%i, name='%s'",
 				 dfu_mode_to_string (dfu_target_get_mode (target)),
 				 g_usb_device_get_vid (usb_device),
 				 g_usb_device_get_pid (usb_device),
