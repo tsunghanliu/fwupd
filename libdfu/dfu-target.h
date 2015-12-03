@@ -75,6 +75,20 @@ typedef enum {
 	DFU_TARGET_TRANSFER_FLAG_LAST,
 } DfuTargetTransferFlags;
 
+/**
+ * DfuTargetCipher:
+ * @DFU_TRANSFER_CIPHER_NONE:			No cipher in use
+ * @DFU_TRANSFER_CIPHER_XTEA:			XTEA cipher in use
+ *
+ * The type of cipher used for transfering the firmware.
+ **/
+typedef enum {
+	DFU_TRANSFER_CIPHER_NONE,
+	DFU_TRANSFER_CIPHER_XTEA,
+	/*< private >*/
+	DFU_TRANSFER_CIPHER_LAST
+} DfuTargetCipher;
+
 GPtrArray	*dfu_target_get_sectors			(DfuTarget	*target);
 guint8		 dfu_target_get_alt_setting		(DfuTarget	*target);
 const gchar	*dfu_target_get_alt_name		(DfuTarget	*target,
@@ -88,6 +102,7 @@ gboolean	 dfu_target_download			(DfuTarget	*target,
 							 DfuTargetTransferFlags flags,
 							 GCancellable	*cancellable,
 							 GError		**error);
+DfuTargetCipher	 dfu_target_get_cipher			(DfuTarget	*target);
 
 G_END_DECLS
 
