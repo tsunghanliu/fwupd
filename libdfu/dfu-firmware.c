@@ -55,6 +55,7 @@ typedef struct {
 	guint16			 pid;
 	guint16			 release;
 	guint32			 crc;
+	DfuCipherKind		 cipher_kind;
 	DfuFirmwareFormat	 format;
 } DfuFirmwarePrivate;
 
@@ -879,13 +880,20 @@ dfu_firmware_parse_file (DfuFirmware *firmware, GFile *file,
 			 DfuFirmwareParseFlags flags,
 			 GCancellable *cancellable, GError **error)
 {
+	DfuFirmwarePrivate *priv = GET_PRIVATE (firmware);
 	gchar *contents = NULL;
 	gsize length = 0;
+	g_autofree gchar *basename = NULL;
 	g_autoptr(GBytes) bytes = NULL;
 
 	g_return_val_if_fail (DFU_IS_FIRMWARE (firmware), FALSE);
 	g_return_val_if_fail (G_IS_FILE (file), FALSE);
 	g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+	/* guess cipher kind based on file extension */
+	basename = g_file_get_basename (file);
+	if (g_str_has_suffix (basename, ".xdfu"))
+		priv->cipher_kind = DFU_CIPHER_KIND_XTEA;
 
 	if (!g_file_load_contents (file, cancellable, &contents,
 				   &length, NULL, error))
@@ -1122,4 +1130,26 @@ dfu_firmware_format_to_string (DfuFirmwareFormat format)
 	if (format == DFU_FIRMWARE_FORMAT_DFUSE)
 		return "DfuSe";
 	return NULL;
+}
+
+/**
+ * dfu_firmware_get_cipher_kind:
+ * @firmware: a #DfuFirmware
+ *
+ * Returns the kind of cipher used by the firmware file.
+ *
+ * NOTE: this value is based on a heuristic, and may not be accurate.
+ * The value %DFU_CIPHER_KIND_NONE will be returned when the cipher
+ * is not recognised.
+ *
+ * Return value: NULL terminated string, or %NULL for invalid
+ *
+ * Since: 0.5.4
+ **/
+DfuCipherKind
+dfu_firmware_get_cipher_kind (DfuFirmware *firmware)
+{
+	DfuFirmwarePrivate *priv = GET_PRIVATE (firmware);
+	g_return_val_if_fail (DFU_IS_FIRMWARE (firmware), 0);
+	return priv->cipher_kind;
 }

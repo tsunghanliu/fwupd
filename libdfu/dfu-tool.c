@@ -1323,7 +1323,7 @@ dfu_tool_encrypt (DfuToolPrivate *priv, gchar **values, GError **error)
 	g_autoptr(GFile) file_out = NULL;
 
 	/* check args */
-	if (g_strv_length (values) < 3) {
+	if (g_strv_length (values) < 4) {
 		g_set_error_literal (error,
 				     DFU_ERROR,
 				     DFU_ERROR_INTERNAL,
@@ -1678,6 +1678,11 @@ dfu_tool_write_alt (DfuToolPrivate *priv, gchar **values, GError **error)
 		}
 	}
 
+	/* allow forcing firmware kinds */
+	if (priv->force) {
+		flags |= DFU_TARGET_TRANSFER_FLAG_ANY_CIPHER;
+	}
+
 	/* transfer */
 	if (!dfu_target_download (target,
 				  image,
@@ -1747,6 +1752,7 @@ dfu_tool_write (DfuToolPrivate *priv, gchar **values, GError **error)
 	if (priv->force) {
 		flags |= DFU_TARGET_TRANSFER_FLAG_WILDCARD_VID;
 		flags |= DFU_TARGET_TRANSFER_FLAG_WILDCARD_PID;
+		flags |= DFU_TARGET_TRANSFER_FLAG_ANY_CIPHER;
 	}
 
 	/* transfer */

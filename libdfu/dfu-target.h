@@ -26,6 +26,7 @@
 #include <gio/gio.h>
 #include <gusb.h>
 
+#include "dfu-common.h"
 #include "dfu-image.h"
 
 G_BEGIN_DECLS
@@ -60,6 +61,7 @@ struct _DfuTargetClass
  * @DFU_TARGET_TRANSFER_FLAG_WAIT_RUNTIME:	Wait for runtime to load after completion
  * @DFU_TARGET_TRANSFER_FLAG_WILDCARD_VID:	Allow downloading images with wildcard VIDs
  * @DFU_TARGET_TRANSFER_FLAG_WILDCARD_PID:	Allow downloading images with wildcard PIDs
+ * @DFU_TARGET_TRANSFER_FLAG_ANY_CIPHER:	Allow any cipher kinds to be downloaded
  *
  * The optional flags used for transfering firmware.
  **/
@@ -71,23 +73,10 @@ typedef enum {
 	DFU_TARGET_TRANSFER_FLAG_WAIT_RUNTIME	= (1 << 3),
 	DFU_TARGET_TRANSFER_FLAG_WILDCARD_VID	= (1 << 4),
 	DFU_TARGET_TRANSFER_FLAG_WILDCARD_PID	= (1 << 5),
+	DFU_TARGET_TRANSFER_FLAG_ANY_CIPHER	= (1 << 6),
 	/*< private >*/
 	DFU_TARGET_TRANSFER_FLAG_LAST,
 } DfuTargetTransferFlags;
-
-/**
- * DfuTargetCipher:
- * @DFU_TRANSFER_CIPHER_NONE:			No cipher in use
- * @DFU_TRANSFER_CIPHER_XTEA:			XTEA cipher in use
- *
- * The type of cipher used for transfering the firmware.
- **/
-typedef enum {
-	DFU_TRANSFER_CIPHER_NONE,
-	DFU_TRANSFER_CIPHER_XTEA,
-	/*< private >*/
-	DFU_TRANSFER_CIPHER_LAST
-} DfuTargetCipher;
 
 GPtrArray	*dfu_target_get_sectors			(DfuTarget	*target);
 guint8		 dfu_target_get_alt_setting		(DfuTarget	*target);
@@ -102,7 +91,7 @@ gboolean	 dfu_target_download			(DfuTarget	*target,
 							 DfuTargetTransferFlags flags,
 							 GCancellable	*cancellable,
 							 GError		**error);
-DfuTargetCipher	 dfu_target_get_cipher			(DfuTarget	*target);
+DfuCipherKind	 dfu_target_get_cipher_kind		(DfuTarget	*target);
 
 G_END_DECLS
 

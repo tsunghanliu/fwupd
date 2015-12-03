@@ -1873,6 +1873,8 @@ dfu_device_download (DfuDevice *device,
 		return FALSE;
 	}
 	for (i = 0; i < images->len; i++) {
+		DfuCipherKind cipher_fw;
+		DfuCipherKind cipher_target;
 		DfuImage *image;
 		DfuTargetTransferFlags flags_local = DFU_TARGET_TRANSFER_FLAG_NONE;
 		guint id;
@@ -1884,6 +1886,23 @@ dfu_device_download (DfuDevice *device,
 								   error);
 		if (target_tmp == NULL)
 			return FALSE;
+
+		/* check we're flashing a compatible firmware */
+		cipher_target = dfu_target_get_cipher_kind (target_tmp);
+		cipher_fw = dfu_firmware_get_cipher_kind (firmware);
+		if ((flags & DFU_TARGET_TRANSFER_FLAG_ANY_CIPHER) == 0 &&
+		    cipher_fw != cipher_target) {
+			g_set_error (error,
+				     DFU_ERROR,
+				     DFU_ERROR_INVALID_FILE,
+				     "invalid target cipher kind '%s' "
+				     "for firmware cipher kind '%s'",
+				     dfu_cipher_kind_to_string (cipher_target),
+				     dfu_cipher_kind_to_string (cipher_fw));
+			return FALSE;
+		}
+
+		/* download onto target */
 		if (flags & DFU_TARGET_TRANSFER_FLAG_VERIFY)
 			flags_local = DFU_TARGET_TRANSFER_FLAG_VERIFY;
 		id = g_signal_connect (target_tmp, "percentage-changed",

@@ -60,7 +60,7 @@ typedef enum {
  **/
 typedef struct {
 	DfuDevice		*device;		/* not refcounted */
-	DfuTargetCipher		 cipher;
+	DfuCipherKind		 cipher_kind;
 	gboolean		 done_setup;
 	guint8			 alt_setting;
 	guint8			 alt_idx;
@@ -334,8 +334,8 @@ dfu_target_parse_sectors (DfuTarget *target, const gchar *alt_name, GError **err
 		return TRUE;
 
 	/* do we have any hint for the cipher */
-	if (g_strstr_len (alt_name, -1, ">XTEA") != NULL)
-		priv->cipher = DFU_TRANSFER_CIPHER_XTEA;
+	if (g_strstr_len (alt_name, -1, "|XTEA") != NULL)
+		priv->cipher_kind = DFU_CIPHER_KIND_XTEA;
 
 	/* From the Neo Freerunner */
 	if (g_str_has_prefix (alt_name, "RAM 0x")) {
@@ -1488,19 +1488,19 @@ dfu_target_get_alt_name (DfuTarget *target, GError **error)
 }
 
 /**
- * dfu_target_get_cipher:
+ * dfu_target_get_cipher_kind:
  * @target: a #DfuTarget
  *
  * Gets the cipher used for data sent to this interface.
  *
- * Return value: the cipher, typically %DFU_TRANSFER_CIPHER_NONE
+ * Return value: the cipher, typically %DFU_CIPHER_KIND_NONE
  *
  * Since: 0.5.4
  **/
-DfuTargetCipher
-dfu_target_get_cipher (DfuTarget *target)
+DfuCipherKind
+dfu_target_get_cipher_kind (DfuTarget *target)
 {
 	DfuTargetPrivate *priv = GET_PRIVATE (target);
 	g_return_val_if_fail (DFU_IS_TARGET (target), 0);
-	return priv->cipher;
+	return priv->cipher_kind;
 }
