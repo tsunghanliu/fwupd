@@ -442,40 +442,46 @@ fu_main_get_guids_from_store (AsStore *store)
 static void
 fu_main_vendor_quirk_release_version (AsApp *app)
 {
-	AsRelease *rel;
 	AsVersionParseFlag flags = AS_VERSION_PARSE_FLAG_USE_TRIPLET;
-	const gchar *version;
-	guint64 ver_uint32;
-	g_autofree gchar *version_new = NULL;
+	GPtrArray *releases;
+	guint i;
 
 	/* no quirk required */
 	if (as_app_get_id_kind (app) != AS_ID_KIND_FIRMWARE)
-		return;
-	rel = as_app_get_release_default (app);
-	if (rel == NULL)
-		return;
-	version = as_release_get_version (rel);
-	if (version == NULL)
-		return;
-	if (g_strstr_len (version, -1, ".") != NULL)
 		return;
 
 	/* Dell uses AA.BB.CC.DD rather than AA.BB.CCDD */
 	if (g_str_has_prefix (as_app_get_id (app), "com.dell.uefi"))
 		flags = AS_VERSION_PARSE_FLAG_NONE;
 
-	/* metainfo files use hex and the LVFS uses decimal */
-	if (g_str_has_prefix (version, "0x")) {
-		ver_uint32 = g_ascii_strtoull (version + 2, NULL, 16);
-	} else {
-		ver_uint32 = g_ascii_strtoull (version, NULL, 10);
-	}
-	if (ver_uint32 == 0)
-		return;
+	/* fix each release */
+	releases = as_app_get_releases (app);
+	for (i = 0; i < releases->len; i++) {
+		AsRelease *rel;
+		const gchar *version;
+		guint64 ver_uint32;
+		g_autofree gchar *version_new = NULL;
 
-	/* convert to dotted decimal */
-	version_new = as_utils_version_from_uint32 (ver_uint32, flags);
-	as_release_set_version (rel, version_new);
+		rel = g_ptr_array_index (releases, i);
+		version = as_release_get_version (rel);
+		if (version == NULL)
+			continue;
+		if (g_strstr_len (version, -1, ".") != NULL)
+			continue;
+
+		/* metainfo files use hex and the LVFS uses decimal */
+		if (g_str_has_prefix (version, "0x")) {
+			ver_uint32 = g_ascii_strtoull (version + 2, NULL, 16);
+		} else {
+			ver_uint32 = g_ascii_strtoull (version, NULL, 10);
+		}
+		if (ver_uint32 == 0)
+			continue;
+
+		/* convert to dotted decimal */
+		version_new = as_utils_version_from_uint32 (ver_uint32, flags);
+		as_release_set_version (rel, version_new);
+	}
 }
 
 /**

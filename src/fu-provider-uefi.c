@@ -265,7 +265,7 @@ fu_provider_uefi_get_version_format (void)
 
 	/* any vendors match */
 	if (!g_file_get_contents ("/sys/class/dmi/id/sys_vendor",
-				  &content, &length, NULL))
+				  &content, NULL, NULL))
 		return AS_VERSION_PARSE_FLAG_USE_TRIPLET;
 	g_strchomp (content);
 	for (i = 0; version_flags[i].sys_vendor != NULL; i++) {
