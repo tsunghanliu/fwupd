@@ -60,6 +60,7 @@ struct _FuDeviceClass
 #define FU_DEVICE_KEY_APPSTREAM_ID	"AppstreamId" /* s */
 #define FU_DEVICE_KEY_CREATED		"Created"	/* t */
 #define FU_DEVICE_KEY_MODIFIED		"Modified"	/* t */
+#define FU_DEVICE_KEY_VENDOR_DRIVER	"VendorDriver"	/* s */
 
 FuDevice	*fu_device_new				(void);
 
