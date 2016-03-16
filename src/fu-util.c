@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*-
  *
- * Copyright (C) 2015 Richard Hughes <richard@hughsie.com>
+ * Copyright (C) 2015-2016 Richard Hughes <richard@hughsie.com>
  *
  * Licensed under the GNU General Public License Version 2
  *
@@ -254,17 +254,36 @@ fu_util_get_devices_cb (GObject *source, GAsyncResult *res, gpointer user_data)
 }
 
 /**
+ * fu_util_parse_results_from_data:
+ **/
+static GPtrArray *
+fu_util_parse_results_from_data (GVariant *devices)
+{
+	FwupdResult *res;
+	GPtrArray *results = NULL;
+	gsize sz;
+	guint i;
+	g_autoptr(GVariant) untuple = NULL;
+
+	results = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
+	untuple = g_variant_get_child_value (devices, 0);
+	sz = g_variant_n_children (untuple);
+	for (i = 0; i < sz; i++) {
+		g_autoptr(GVariant) data = NULL;
+		data = g_variant_get_child_value (untuple, i);
+		res = fwupd_result_new_from_data (data);
+		g_ptr_array_add (results, res);
+	}
+
+	return results;
+}
+
+/**
  * fu_util_get_devices_internal:
  **/
 static GPtrArray *
 fu_util_get_devices_internal (FuUtilPrivate *priv, GError **error)
 {
-	GVariantIter *iter_device;
-	GPtrArray *devices = NULL;
-	FuDevice *dev;
-	gchar *id;
-	g_autoptr(GVariantIter) iter = NULL;
-
 	g_dbus_proxy_call (priv->proxy,
 			   "GetDevices",
 			   NULL,
@@ -279,16 +298,7 @@ fu_util_get_devices_internal (FuUtilPrivate *priv, GError **error)
 	}
 
 	/* parse */
-	g_variant_get (priv->val, "(a{sa{sv}})", &iter);
-	devices = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
-	while (g_variant_iter_next (iter, "{&sa{sv}}", &id, &iter_device)) {
-		dev = fu_device_new ();
-		fu_device_set_id (dev, id);
-		fu_device_set_metadata_from_iter (dev, iter_device);
-		g_ptr_array_add (devices, dev);
-		g_variant_iter_free (iter_device);
-	}
-	return devices;
+	return fu_util_parse_results_from_data (priv->val);
 }
 
 /**
@@ -297,12 +307,6 @@ fu_util_get_devices_internal (FuUtilPrivate *priv, GError **error)
 static GPtrArray *
 fu_util_get_updates_internal (FuUtilPrivate *priv, GError **error)
 {
-	GVariantIter *iter_device;
-	GPtrArray *devices = NULL;
-	FuDevice *dev;
-	gchar *id;
-	g_autoptr(GVariantIter) iter = NULL;
-
 	g_dbus_proxy_call (priv->proxy,
 			   "GetUpdates",
 			   NULL,
@@ -318,53 +322,7 @@ fu_util_get_updates_internal (FuUtilPrivate *priv, GError **error)
 	}
 
 	/* parse */
-	g_variant_get (priv->val, "(a{sa{sv}})", &iter);
-	devices = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
-	while (g_variant_iter_next (iter, "{&sa{sv}}", &id, &iter_device)) {
-		dev = fu_device_new ();
-		fu_device_set_id (dev, id);
-		fu_device_set_metadata_from_iter (dev, iter_device);
-		g_ptr_array_add (devices, dev);
-		g_variant_iter_free (iter_device);
-	}
-	return devices;
-}
-
-/**
- * pad_print:
- **/
-static void
-pad_print (const gchar *key, const gchar *value)
-{
-	guint k;
-	g_print ("  %s:", key);
-	for (k = strlen (key); k < 15; k++)
-		g_print (" ");
-	g_print (" %s\n", value);
-}
-
-/**
- * fu_util_device_flags_to_string:
- **/
-static gchar *
-fu_util_device_flags_to_string (FwupdDeviceFlags device_flags)
-{
-	GString *str;
-	guint i;
-
-	str = g_string_new ("");
-	for (i = 1; i < FU_DEVICE_FLAG_LAST; i *= 2) {
-		if ((device_flags & i) == 0)
-			continue;
-		g_string_append_printf (str, "%s|",
-					fwupd_device_flag_to_string (i));
-	}
-	if (str->len == 0) {
-		g_string_append (str, fwupd_device_flag_to_string (0));
-	} else {
-		g_string_truncate (str, str->len - 1);
-	}
-	return g_string_free (str, FALSE);
+	return fu_util_parse_results_from_data (priv->val);
 }
 
 /**
@@ -373,74 +331,27 @@ fu_util_device_flags_to_string (FwupdDeviceFlags device_flags)
 static gboolean
 fu_util_get_devices (FuUtilPrivate *priv, gchar **values, GError **error)
 {
-	FuDevice *dev;
-	g_autoptr(GPtrArray) devices = NULL;
+	FwupdResult *res;
 	guint i;
-	guint j;
-	guint64 flags;
-	const gchar *value;
-	const gchar *keys[] = {
-		FU_DEVICE_KEY_DISPLAY_NAME,
-		FU_DEVICE_KEY_PROVIDER,
-		FU_DEVICE_KEY_CREATED,
-		FU_DEVICE_KEY_MODIFIED,
-		FU_DEVICE_KEY_APPSTREAM_ID,
-		FU_DEVICE_KEY_GUID,
-		FU_DEVICE_KEY_VERSION,
-		FU_DEVICE_KEY_URL_HOMEPAGE,
-		FU_DEVICE_KEY_NAME,
-		FU_DEVICE_KEY_SUMMARY,
-		FU_DEVICE_KEY_DESCRIPTION,
-		FU_DEVICE_KEY_LICENSE,
-		FU_DEVICE_KEY_FLAGS,
-		FU_DEVICE_KEY_TRUSTED,
-		FU_DEVICE_KEY_SIZE,
-		FU_DEVICE_KEY_FIRMWARE_HASH,
-		NULL };
+	g_autoptr(GPtrArray) results = NULL;
 
-	/* get devices from daemon */
-	devices = fu_util_get_devices_internal (priv, error);
-	if (devices == NULL)
+	/* get results from daemon */
+	results = fu_util_get_devices_internal (priv, error);
+	if (results == NULL)
 		return FALSE;
 
 	/* print */
-	if (devices->len == 0) {
+	if (results->len == 0) {
 		/* TRANSLATORS: nothing attached that can be upgraded */
 		g_print ("%s\n", _("No hardware detected with firmware update capability"));
 		return TRUE;
 	}
 
-	for (i = 0; i < devices->len; i++) {
-		dev = g_ptr_array_index (devices, i);
-		g_print ("Device: %s\n", fu_device_get_id (dev));
-		for (j = 0; keys[j] != NULL; j++) {
-			if (g_strcmp0 (keys[j], FU_DEVICE_KEY_FLAGS) == 0) {
-				g_autofree gchar *tmp = NULL;
-				flags = fu_device_get_flags (dev);
-				tmp = fu_util_device_flags_to_string (flags);
-				pad_print (keys[j], tmp);
-				continue;
-			}
-			if (g_strcmp0 (keys[j], FU_DEVICE_KEY_CREATED) == 0) {
-				g_autoptr(GDateTime) date = NULL;
-				g_autofree gchar *date_str = NULL;
-				date = g_date_time_new_from_unix_utc (fu_device_get_created (dev));
-				date_str = g_date_time_format (date, "%F");
-				pad_print (keys[j], date_str);
-			}
-			if (g_strcmp0 (keys[j], FU_DEVICE_KEY_MODIFIED) == 0) {
-				g_autoptr(GDateTime) date = NULL;
-				g_autofree gchar *date_str = NULL;
-				if (fu_device_get_modified (dev) > 0) {
-					date = g_date_time_new_from_unix_utc (fu_device_get_modified (dev));
-					date_str = g_date_time_format (date, "%F");
-					pad_print (keys[j], date_str);
-				}
-			}
-			value = fu_device_get_metadata (dev, keys[j]);
-			if (value != NULL)
-				pad_print (keys[j], value);
-		}
+	for (i = 0; i < results->len; i++) {
+		g_autofree gchar *tmp = NULL;
+		res = g_ptr_array_index (results, i);
+		tmp = fwupd_result_to_string (res);
+		g_print ("%s\n", tmp);
 	}
 
 	return TRUE;
@@ -595,44 +506,6 @@ fu_util_install (FuUtilPrivate *priv, gchar **values, GError **error)
 }
 
 /**
- * fu_util_print_metadata:
- **/
-static void
-fu_util_print_metadata (GVariant *val)
-{
-	GVariant *variant;
-	const gchar *key;
-	const gchar *type;
-	guint i;
-	g_autoptr(GVariantIter) iter = NULL;
-
-	g_variant_get (val, "(a{sv})", &iter);
-	while (g_variant_iter_next (iter, "{&sv}", &key, &variant)) {
-		g_print ("%s", key);
-		for (i = strlen (key); i < 15; i++)
-			g_print (" ");
-		if (g_strcmp0 (key, FU_DEVICE_KEY_FLAGS) == 0) {
-			g_autofree gchar *tmp = NULL;
-			guint64 flags = g_variant_get_uint64 (variant);
-			tmp = fu_util_device_flags_to_string (flags);
-			g_print ("%s\n", tmp);
-		} else {
-			type = g_variant_get_type_string (variant);
-			if (g_strcmp0 (type, "s") == 0) {
-				g_print ("%s\n", g_variant_get_string (variant, NULL));
-			} else if (g_strcmp0 (type, "b") == 0) {
-				g_print ("%s\n", g_variant_get_boolean (variant) ? "True" : "False");
-			} else if (g_strcmp0 (type, "t") == 0) {
-				g_print ("%" G_GUINT64_FORMAT "\n", g_variant_get_uint64 (variant));
-			} else {
-				g_print ("???? [%s]\n", type);
-			}
-		}
-		g_variant_unref (variant);
-	}
-}
-
-/**
  * fu_util_get_details:
  **/
 static gboolean
@@ -642,6 +515,8 @@ fu_util_get_details (FuUtilPrivate *priv, gchar **values, GError **error)
 	GVariant *val;
 	gint fd;
 	gint retval;
+	g_autofree gchar *tmp = NULL;
+	g_autoptr(FwupdResult) res = NULL;
 	g_autoptr(GDBusMessage) message = NULL;
 	g_autoptr(GDBusMessage) request = NULL;
 	g_autoptr(GUnixFDList) fd_list = NULL;
@@ -700,7 +575,9 @@ fu_util_get_details (FuUtilPrivate *priv, gchar **values, GError **error)
 
 	/* print results */
 	val = g_dbus_message_get_body (message);
-	fu_util_print_metadata (val);
+	res = fwupd_result_new_from_data (val);
+	tmp = fwupd_result_to_string (res);
+	g_print ("%s", tmp);
 	return TRUE;
 }
 
@@ -742,9 +619,8 @@ fu_util_install_prepared (FuUtilPrivate *priv, gchar **values, GError **error)
 	gint vercmp;
 	guint cnt = 0;
 	guint i;
-	const gchar *tmp;
 	g_autofree gchar *link = NULL;
-	g_autoptr(GPtrArray) devices = NULL;
+	g_autoptr(GPtrArray) results = NULL;
 	g_autoptr(FuPending) pending = NULL;
 
 	/* verify this is pointing to our cache */
@@ -780,50 +656,49 @@ fu_util_install_prepared (FuUtilPrivate *priv, gchar **values, GError **error)
 
 	/* get prepared updates */
 	pending = fu_pending_new ();
-	devices = fu_pending_get_devices (pending, error);
-	if (devices == NULL)
+	results = fu_pending_get_devices (pending, error);
+	if (results == NULL)
 		return FALSE;
 
 	/* apply each update */
-	for (i = 0; i < devices->len; i++) {
-		FuDevice *device;
-		device = g_ptr_array_index (devices, i);
+	for (i = 0; i < results->len; i++) {
+		FwupdResult *res;
+		res = g_ptr_array_index (results, i);
 
 		/* check not already done */
-		tmp = fu_device_get_metadata (device, FU_DEVICE_KEY_PENDING_STATE);
-		if (g_strcmp0 (tmp, "scheduled") != 0)
+		if (fwupd_result_get_update_state (res) != FWUPD_UPDATE_STATE_PENDING)
 			continue;
 
 		/* tell the user what's going to happen */
-		vercmp = as_utils_vercmp (fu_device_get_metadata (device, FU_DEVICE_KEY_VERSION),
-					  fu_device_get_metadata (device, FU_DEVICE_KEY_UPDATE_VERSION));
+		vercmp = as_utils_vercmp (fwupd_result_get_device_version (res),
+					  fwupd_result_get_update_version (res));
 		if (vercmp == 0) {
 			/* TRANSLATORS: the first replacement is a display name
 			 * e.g. "ColorHugALS" and the second is a version number
 			 * e.g. "1.2.3" */
 			g_print (_("Reinstalling %s with %s... "),
-				 fu_device_get_display_name (device),
-				 fu_device_get_metadata (device, FU_DEVICE_KEY_UPDATE_VERSION));
+				 fwupd_result_get_device_name (res),
+				 fwupd_result_get_update_version (res));
 		} else if (vercmp > 0) {
 			/* TRANSLATORS: the first replacement is a display name
 			 * e.g. "ColorHugALS" and the second and third are
 			 * version numbers e.g. "1.2.3" */
 			g_print (_("Downgrading %s from %s to %s... "),
-				 fu_device_get_display_name (device),
-				 fu_device_get_metadata (device, FU_DEVICE_KEY_VERSION),
-				 fu_device_get_metadata (device, FU_DEVICE_KEY_UPDATE_VERSION));
+				 fwupd_result_get_device_name (res),
+				 fwupd_result_get_device_version (res),
+				 fwupd_result_get_update_version (res));
 		} else if (vercmp < 0) {
 			/* TRANSLATORS: the first replacement is a display name
 			 * e.g. "ColorHugALS" and the second and third are
 			 * version numbers e.g. "1.2.3" */
 			g_print (_("Updating %s from %s to %s... "),
-				 fu_device_get_display_name (device),
-				 fu_device_get_metadata (device, FU_DEVICE_KEY_VERSION),
-				 fu_device_get_metadata (device, FU_DEVICE_KEY_UPDATE_VERSION));
+				 fwupd_result_get_device_name (res),
+				 fwupd_result_get_device_version (res),
+				 fwupd_result_get_update_version (res));
 		}
 		if (!fu_util_install_internal (priv,
-					       fu_device_get_id (device),
-					       fu_device_get_metadata (device, FU_DEVICE_KEY_FILENAME_CAB),
+					       fwupd_result_get_device_id (res),
+					       fwupd_result_get_update_filename (res),
 					       error))
 			return FALSE;
 		cnt++;
@@ -1263,6 +1138,9 @@ fu_util_refresh (FuUtilPrivate *priv, gchar **values, GError **error)
 static gboolean
 fu_util_get_results (FuUtilPrivate *priv, gchar **values, GError **error)
 {
+	g_autofree gchar *tmp = NULL;
+	g_autoptr(FwupdResult) res = NULL;
+
 	if (g_strv_length (values) != 1) {
 		g_set_error_literal (error,
 				     FWUPD_ERROR,
@@ -1285,7 +1163,9 @@ fu_util_get_results (FuUtilPrivate *priv, gchar **values, GError **error)
 		g_propagate_error (error, priv->error);
 		return FALSE;
 	}
-	fu_util_print_metadata (priv->val);
+	res = fwupd_result_new_from_data (priv->val);
+	tmp = fwupd_result_to_string (res);
+	g_print ("%s", tmp);
 	return TRUE;
 }
 
@@ -1320,27 +1200,27 @@ fu_util_verify_internal (FuUtilPrivate *priv, const gchar *id, GError **error)
 static gboolean
 fu_util_verify_all (FuUtilPrivate *priv, GError **error)
 {
-	FuDevice *dev;
+	FwupdResult *res;
 	guint i;
-	g_autoptr(GPtrArray) devices = NULL;
+	g_autoptr(GPtrArray) results = NULL;
 
 	/* get devices from daemon */
-	devices = fu_util_get_devices_internal (priv, error);
-	if (devices == NULL)
+	results = fu_util_get_devices_internal (priv, error);
+	if (results == NULL)
 		return FALSE;
 
 	/* get results */
-	for (i = 0; i < devices->len; i++) {
+	for (i = 0; i < results->len; i++) {
 		g_autoptr(GError) error_local = NULL;
-		dev = g_ptr_array_index (devices, i);
-		if (!fu_util_verify_internal (priv, fu_device_get_id (dev), &error_local)) {
+		res = g_ptr_array_index (results, i);
+		if (!fu_util_verify_internal (priv, fwupd_result_get_device_id (res), &error_local)) {
 			g_print ("%s\tFAILED: %s\n",
-				 fu_device_get_guid (dev),
+				 fwupd_result_get_guid (res),
 				 error_local->message);
 			continue;
 		}
 		g_print ("%s\t%s\n",
-			 fu_device_get_guid (dev),
+			 fwupd_result_get_guid (res),
 			 _("OK"));
 	}
 	return TRUE;
@@ -1426,44 +1306,39 @@ fu_util_print_data (const gchar *title, const gchar *msg)
 static gboolean
 fu_util_get_updates (FuUtilPrivate *priv, gchar **values, GError **error)
 {
-	FuDevice *dev;
-	GPtrArray *devices = NULL;
+	FwupdResult *res;
+	GPtrArray *results = NULL;
 	const gchar *tmp;
 	guint i;
 
 	/* print any updates */
-	devices = fu_util_get_updates_internal (priv, error);
-	if (devices == NULL)
+	results = fu_util_get_updates_internal (priv, error);
+	if (results == NULL)
 		return FALSE;
-	for (i = 0; i < devices->len; i++) {
-		dev = g_ptr_array_index (devices, i);
+	for (i = 0; i < results->len; i++) {
+		res = g_ptr_array_index (results, i);
 
 		/* TRANSLATORS: first replacement is device name */
-		g_print (_("%s has firmware updates:"), fu_device_get_display_name (dev));
+		g_print (_("%s has firmware updates:"), fwupd_result_get_device_name (res));
 		g_print ("\n");
 
 		/* TRANSLATORS: Appstream ID for the hardware type */
-		fu_util_print_data (_("ID"),
-				    fu_device_get_metadata (dev, FU_DEVICE_KEY_APPSTREAM_ID));
+		fu_util_print_data (_("ID"), fwupd_result_get_update_id (res));
 
 		/* TRANSLATORS: a GUID for the hardware */
-		fu_util_print_data (_("GUID"),
-				    fu_device_get_metadata (dev, FU_DEVICE_KEY_GUID));
+		fu_util_print_data (_("GUID"), fwupd_result_get_guid (res));
 
 		/* TRANSLATORS: section header for firmware version */
-		fu_util_print_data (_("Version"),
-				    fu_device_get_metadata (dev, FU_DEVICE_KEY_UPDATE_VERSION));
+		fu_util_print_data (_("Version"), fwupd_result_get_update_version (res));
 
 		/* TRANSLATORS: section header for firmware SHA1 */
-		fu_util_print_data (_("Checksum"),
-				    fu_device_get_metadata (dev, FU_DEVICE_KEY_UPDATE_HASH));
+		fu_util_print_data (_("Checksum"), fwupd_result_get_update_checksum (res));
 
 		/* TRANSLATORS: section header for firmware remote http:// */
-		fu_util_print_data (_("Location"),
-				    fu_device_get_metadata (dev, FU_DEVICE_KEY_UPDATE_URI));
+		fu_util_print_data (_("Location"), fwupd_result_get_update_uri (res));
 
 		/* convert XML -> text */
-		tmp = fu_device_get_metadata (dev, FU_DEVICE_KEY_UPDATE_DESCRIPTION);
+		tmp = fwupd_result_get_update_description (res);
 		if (tmp != NULL) {
 			g_autofree gchar *md = NULL;
 			md = as_markup_convert (tmp,
@@ -1485,40 +1360,40 @@ fu_util_get_updates (FuUtilPrivate *priv, gchar **values, GError **error)
 static gboolean
 fu_util_update (FuUtilPrivate *priv, gchar **values, GError **error)
 {
-	FuDevice *dev;
-	GPtrArray *devices = NULL;
+	FwupdResult *res;
+	GPtrArray *results = NULL;
 	guint i;
 
 	/* apply any updates */
-	devices = fu_util_get_updates_internal (priv, error);
-	if (devices == NULL)
+	results = fu_util_get_updates_internal (priv, error);
+	if (results == NULL)
 		return FALSE;
-	for (i = 0; i < devices->len; i++) {
+	for (i = 0; i < results->len; i++) {
 		const gchar *checksum;
 		const gchar *uri;
 		g_autofree gchar *basename = NULL;
 		g_autofree gchar *fn = NULL;
 
-		dev = g_ptr_array_index (devices, i);
+		res = g_ptr_array_index (results, i);
 
 		/* download file */
-		checksum = fu_device_get_metadata (dev, FU_DEVICE_KEY_UPDATE_HASH);
+		checksum = fwupd_result_get_update_checksum (res);
 		if (checksum == NULL)
 			continue;
-		uri = fu_device_get_metadata (dev, FU_DEVICE_KEY_UPDATE_URI);
+		uri = fwupd_result_get_update_uri (res);
 		if (uri == NULL)
 			continue;
 		g_print ("Downloading %s for %s...\n",
-			 fu_device_get_metadata (dev, FU_DEVICE_KEY_UPDATE_VERSION),
-			 fu_device_get_display_name (dev));
+			 fwupd_result_get_update_version (res),
+			 fwupd_result_get_device_name (res));
 		basename = g_path_get_basename (uri);
 		fn = g_build_filename (g_get_tmp_dir (), basename, NULL);
 		if (!fu_util_download_file (priv, uri, fn, checksum, error))
 			return FALSE;
 		g_print ("Updating %s on %s...\n",
-			 fu_device_get_metadata (dev, FU_DEVICE_KEY_UPDATE_VERSION),
-			 fu_device_get_display_name (dev));
-		if (!fu_util_install_with_fallback (priv, fu_device_get_id (dev), fn, error))
+			 fwupd_result_get_update_version (res),
+			 fwupd_result_get_device_name (res));
+		if (!fu_util_install_with_fallback (priv, fwupd_result_get_device_id (res), fn, error))
 			return FALSE;
 	}
 

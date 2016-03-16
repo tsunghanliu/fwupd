@@ -118,3 +118,75 @@ fwupd_device_flag_from_string (const gchar *device_flag)
 		return FU_DEVICE_FLAG_LOCKED;
 	return FU_DEVICE_FLAG_LAST;
 }
+
+/**
+ * fwupd_update_state_to_string:
+ *
+ * Since: 0.7.0
+ **/
+const gchar *
+fwupd_update_state_to_string (FwupdUpdateState update_state)
+{
+	if (update_state == FWUPD_UPDATE_STATE_UNKNOWN)
+		return "unknown";
+	if (update_state == FWUPD_UPDATE_STATE_PENDING)
+		return "pending";
+	if (update_state == FWUPD_UPDATE_STATE_SUCCESS)
+		return "success";
+	if (update_state == FWUPD_UPDATE_STATE_FAILED)
+		return "failed";
+	return NULL;
+}
+
+/**
+ * fwupd_update_state_from_string:
+ *
+ * Since: 0.7.0
+ **/
+FwupdUpdateState
+fwupd_update_state_from_string (const gchar *update_state)
+{
+	if (g_strcmp0 (update_state, "unknown") == 0)
+		return FWUPD_UPDATE_STATE_UNKNOWN;
+	if (g_strcmp0 (update_state, "pending") == 0)
+		return FWUPD_UPDATE_STATE_PENDING;
+	if (g_strcmp0 (update_state, "success") == 0)
+		return FWUPD_UPDATE_STATE_SUCCESS;
+	if (g_strcmp0 (update_state, "failed") == 0)
+		return FWUPD_UPDATE_STATE_FAILED;
+	return FWUPD_UPDATE_STATE_UNKNOWN;
+}
+
+/**
+ * fwupd_trust_flag_to_string:
+ *
+ * Since: 0.7.0
+ **/
+const gchar *
+fwupd_trust_flag_to_string (FwupdTrustFlags trust_flag)
+{
+	if (trust_flag == FWUPD_TRUST_FLAG_NONE)
+		return "none";
+	if (trust_flag == FWUPD_TRUST_FLAG_PAYLOAD)
+		return "payload";
+	if (trust_flag == FWUPD_TRUST_FLAG_METADATA)
+		return "metadata";
+	return NULL;
+}
+
+/**
+ * fwupd_trust_flag_from_string:
+ *
+ * Since: 0.7.0
+ **/
+FwupdTrustFlags
+fwupd_trust_flag_from_string (const gchar *trust_flag)
+{
+	if (g_strcmp0 (trust_flag, "none") == 0)
+		return FWUPD_TRUST_FLAG_NONE;
+	if (g_strcmp0 (trust_flag, "payload") == 0)
+		return FWUPD_TRUST_FLAG_PAYLOAD;
+	if (g_strcmp0 (trust_flag, "metadata") == 0)
+		return FWUPD_TRUST_FLAG_METADATA;
+	return FWUPD_TRUST_FLAG_LAST;
+}
