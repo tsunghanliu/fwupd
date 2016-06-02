@@ -1276,7 +1276,8 @@ dfu_device_open (DfuDevice *device, DfuDeviceOpenFlags flags,
 	}
 
 	/* claim the correct interface if set */
-	if (priv->iface_number != 0xff) {
+	if ((flags & DFU_DEVICE_OPEN_FLAG_NO_INTERFACE) == 0 &&
+	    priv->iface_number != 0xff) {
 		if (!g_usb_device_claim_interface (priv->dev,
 						   (gint) priv->iface_number,
 						   0,

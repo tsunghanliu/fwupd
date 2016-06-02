@@ -39,12 +39,14 @@ G_DECLARE_DERIVABLE_TYPE (DfuDevice, dfu_device, DFU, DEVICE, GObject)
  * DfuDeviceOpenFlags:
  * @DFU_DEVICE_OPEN_FLAG_NONE:			No flags set
  * @DFU_DEVICE_OPEN_FLAG_NO_AUTO_REFRESH:	Do not do the initial GET_STATUS
+ * @DFU_DEVICE_OPEN_FLAG_NO_INTERFACE:		Do not claim the DFU interface
  *
  * The optional flags used for opening the target.
  **/
 typedef enum {
 	DFU_DEVICE_OPEN_FLAG_NONE		= 0,
 	DFU_DEVICE_OPEN_FLAG_NO_AUTO_REFRESH	= (1 << 0),
+	DFU_DEVICE_OPEN_FLAG_NO_INTERFACE	= (1 << 1),
 	/*< private >*/
 	DFU_DEVICE_OPEN_FLAG_LAST
 } DfuDeviceOpenFlags;

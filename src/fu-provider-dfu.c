@@ -159,7 +159,10 @@ fu_provider_dfu_device_added_cb (DfuContext *ctx,
 	fu_provider_dfu_device_update (provider_dfu, dev, device);
 
 	/* open device to get display name */
-	if (!dfu_device_open (device, DFU_DEVICE_OPEN_FLAG_NONE, NULL, &error)) {
+	if (!dfu_device_open (device,
+			      DFU_DEVICE_OPEN_FLAG_NO_INTERFACE,
+			      NULL, /* GCancellable */
+			      &error)) {
 		g_warning ("Failed to open DFU device: %s", error->message);
 		return;
 	}

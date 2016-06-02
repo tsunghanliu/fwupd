@@ -1151,7 +1151,7 @@ dfu_tool_get_device_string (DfuToolPrivate *priv, DfuDevice *device)
 					"removed");
 	}
 	if (!dfu_device_open (device,
-			      DFU_DEVICE_OPEN_FLAG_NONE,
+			      DFU_DEVICE_OPEN_FLAG_NO_INTERFACE,
 			      priv->cancellable,
 			      &error)) {
 		return g_strdup_printf ("%04x:%04x [%s]",
