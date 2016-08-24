@@ -40,6 +40,7 @@
 #include <string.h>
 
 #include "dfu-common.h"
+#include "dfu-cipher-devo.h"
 #include "dfu-device-private.h"
 #include "dfu-error.h"
 #include "dfu-target-private.h"
@@ -61,6 +62,7 @@ typedef struct {
 	gchar			*display_name;
 	gchar			*serial_number;
 	gchar			*platform_id;
+	gchar			*cipher_key;
 	guint16			 version;
 	guint16			 runtime_pid;
 	guint16			 runtime_vid;
@@ -238,6 +240,7 @@ dfu_device_finalize (GObject *object)
 	g_free (priv->display_name);
 	g_free (priv->serial_number);
 	g_free (priv->platform_id);
+	g_free (priv->cipher_key);
 	g_ptr_array_unref (priv->targets);
 
 	G_OBJECT_CLASS (dfu_device_parent_class)->finalize (object);
@@ -626,6 +629,10 @@ dfu_device_set_quirks (DfuDevice *device)
 	/* m-stack DFU implementation */
 	if (vid == 0x273f && pid == 0x1003)
 		priv->quirks |= DFU_DEVICE_QUIRK_ATTACH_UPLOAD_DOWNLOAD;
+
+	/* Walkera bootloader requires the Devo cipher to be used */
+	if (vid == 0x0483 && pid == 0xdf11)
+		priv->quirks |= DFU_DEVICE_QUIRK_REQUIRE_CIPHER_DEVO;
 
 	/* the DSO Nano has uses 0 instead of 2 when in DFU mode */
 //	quirks |= DFU_DEVICE_QUIRK_USE_PROTOCOL_ZERO;
@@ -1346,6 +1353,38 @@ dfu_device_open (DfuDevice *device, DfuDeviceOpenFlags flags,
 		flags |= DFU_DEVICE_OPEN_FLAG_NO_AUTO_REFRESH;
 	}
 
+	/* get the cipher key on Walkera devices */
+	if (priv->serial_number != NULL &&
+	    priv->quirks & DFU_DEVICE_QUIRK_REQUIRE_CIPHER_DEVO) {
+		guint i;
+		struct {
+			const gchar		*serial;
+			guint			 offset;
+		} devo_offsets[] = {
+			{ "DEVO-F4 C",		4 },
+			{ "DEVO-6 C",		8 },
+			{ "DEVO-6S C",		8 },
+			{ "DEVO-7E C",		7 },
+			{ "DEVO-F7 C",		7 },
+			{ "DEVO-8 C",		8 },
+			{ "DEVO-8S C",		8 },
+			{ "DEVO-10 C",		10 },
+			{ "DEVO-12 C",		12 },
+			{ "DEVO-12S C",		12 },
+			{ "DEVO-F12E C",	12 },
+			{ NULL, 0 }
+		};
+		for (i = 0; devo_offsets[i].serial != NULL; i++) {
+			if (g_strcmp0 (priv->serial_number,
+				       devo_offsets[i].serial) == 0) {
+				g_free (priv->cipher_key);
+				priv->cipher_key = g_strdup_printf ("%u",
+							devo_offsets[i].offset);
+				break;
+			}
+		}
+	}
+
 	/* automatically abort any uploads or downloads */
 	if ((flags & DFU_DEVICE_OPEN_FLAG_NO_AUTO_REFRESH) == 0) {
 		if (!dfu_device_refresh (device, cancellable, error))
@@ -1769,6 +1808,21 @@ dfu_device_upload (DfuDevice *device,
 		g_signal_handler_disconnect (target, id);
 		if (image == NULL)
 			return NULL;
+
+		/* decode data if Walkera */
+		if (priv->quirks & DFU_DEVICE_QUIRK_REQUIRE_CIPHER_DEVO &&
+		    priv->cipher_key != NULL) {
+			DfuElement *element;
+			GBytes *data;
+			element = dfu_image_get_element_default (image);
+			data = dfu_element_get_contents (element);
+			if (!dfu_cipher_decrypt_devo (priv->cipher_key,
+						      (guint8 *) g_bytes_get_data (data, NULL),
+						      (guint32) g_bytes_get_size (data),
+						      error))
+				return FALSE;
+		}
+
 		dfu_firmware_add_image (firmware, image);
 	}
 
@@ -1945,9 +1999,27 @@ dfu_device_download (DfuDevice *device,
 			return FALSE;
 		g_debug ("downloading to target: %s", alt_name);
 
-		/* check we're flashing a compatible firmware */
+		/* the Walkera bootloader expects obfuscated images */
 		cipher_target = dfu_target_get_cipher_kind (target_tmp);
 		cipher_fw = dfu_firmware_get_cipher_kind (firmware);
+		if (cipher_target == DFU_CIPHER_KIND_DEVO &&
+		    cipher_fw == DFU_CIPHER_KIND_NONE &&
+		    priv->cipher_key != NULL) {
+			DfuElement *element;
+			GBytes *data;
+			g_debug ("converting image for Walkera bootloader");
+			element = dfu_image_get_element_default (image);
+			data = dfu_element_get_contents (element);
+			if (!dfu_cipher_encrypt_devo (priv->cipher_key,
+						      (guint8 *) g_bytes_get_data (data, NULL),
+						      (guint32) g_bytes_get_size (data),
+						      error))
+				return FALSE;
+			/* allow next checks to pass */
+			cipher_fw = DFU_CIPHER_KIND_DEVO;
+		}
+
+		/* check we're flashing a compatible firmware */
 		if ((flags & DFU_TARGET_TRANSFER_FLAG_ANY_CIPHER) == 0) {
 			if (cipher_fw != DFU_CIPHER_KIND_NONE &&
 			    cipher_target == DFU_CIPHER_KIND_NONE) {

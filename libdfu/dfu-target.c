@@ -587,6 +587,10 @@ dfu_target_setup (DfuTarget *target, GError **error)
 							    NULL);
 	}
 
+	/* the Walkera bootloader expects obfuscated images */
+	if (dfu_device_has_quirk (priv->device, DFU_DEVICE_QUIRK_REQUIRE_CIPHER_DEVO))
+		priv->cipher_kind = DFU_CIPHER_KIND_DEVO;
+
 	/* parse the DfuSe format according to UM0424 */
 	if (!dfu_target_parse_sectors (target,
 				       priv->alt_name,
