@@ -11,5 +11,17 @@ addons:
     packages:
     - libnl-3-dev
     - libnl-genl-3-dev
+    - libappstream-glib-dev
+    - libarchive-dev
+    - libcolord-dev
+    - libcolorhug-dev
+    - libefivar-dev
+    - libgpg-error-dev
+    - libgpgme11-dev
+    - libgudev-1.0-dev
+    - libgusb-dev
+    - libpolkit-gobject-1-dev
+    - libsoup2.4-dev
+    - libsqlite3-dev
 
 script: ./autogen.sh && ./configure && make
