@@ -11,6 +11,8 @@ addons:
     packages:
     - libnl-3-dev
     - libnl-genl-3-dev
+    - autopoint
+    - gtk-doc-tools
     - libappstream-glib-dev
     - libarchive-dev
     - libcolord-dev
