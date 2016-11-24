@@ -6,14 +6,6 @@ matrix:
     include:
         - os: linux
           dist: trusty
-#        - os: osx
-#          osx_image: xcode8
-#        - os: osx
-#          osx_image: xcode7.3
-#        - os: osx
-#          osx_image: xcode7.1
-#        - os: osx
-#          osx_image: beta-xcode6.2
 
 before_install:
     - if [ `uname` = "Linux" ]; then
@@ -24,16 +16,9 @@ before_install:
   liblcms2-dev libosp5 libostyle1c2 libpng12-dev libpolkit-gobject-1-dev libpotrace0 libptexenc1 libsgmls-perl libsoup2.4-dev libsp1c2 libsqlite3-dev libsynctex1
   libtexlua52 libtexluajit2 libtool-bin libxml2-dev libzzip-0-13 lynx lynx-common openjade python-mako sgmlspl sp tex-common texlive-base texlive-binaries
   texlive-fonts-recommended texlive-generic-recommended texlive-latex-base texlive-latex-recommended tipa uuid-dev valgrind;
-#      elif [ `uname` = "Darwin" ]; then
-#          brew update;
-#          brew install -v librtlsdr;
       fi
 
 script:
     - if [ `uname` = "Linux" ]; then
-#          dpkg-buildpackage -b -us -uc;
-          ./autogen.sh && configure && make;
-#      elif [ `uname` = "Darwin" ]; then
-#          make;
-#         make test;
+          ./autogen.sh && ./configure && make;
       fi
