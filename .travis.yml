@@ -1,0 +1,15 @@
+language: c
+
+dist: trusty
+
+sudo: required
+
+compiler:
+    - gcc
+
+before_install:
+    - sudo apt-get update -qq
+    - sudo apt-get install -y build-essential autoconf-archive dh-autoreconf docbook docbook-dsssl docbook-to-man docbook-utils gcab gir1.2-colord-1.0 gir1.2-colorhug-1.0 gir1.2-gusb-1.0 gir1.2-polkit-1.0 gnome-common gobject-introspection gtk-doc-tools icu-devtools jade jadetex libappstream-glib-dev libarchive-dev libassuan-dev libcolord-dev libcolorhug-dev libefivar-dev libffi-dev libfwup-dev libgcab-dev libgdk-pixbuf2.0-dev libgirepository1.0-dev libgpg-error-dev libgpgme11-dev libgudev-1.0-dev libgusb-dev libicu-dev liblcms2-dev libosp5 libostyle1c2 libpng12-dev libpolkit-gobject-1-dev libpotrace0 libptexenc1 libsgmls-perl libsoup2.4-dev libsp1c2 libsqlite3-dev libsynctex1 libtexlua52 libtexluajit2 libtool-bin libxml2-dev libzzip-0-13 lynx lynx-common openjade python-mako sgmlspl sp tex-common texlive-base texlive-binaries texlive-fonts-recommended texlive-generic-recommended texlive-latex-base texlive-latex-recommended tipa uuid-dev valgrind
+
+script:
+   - ./autogen.sh && ./configure && make
